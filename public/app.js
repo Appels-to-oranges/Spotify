@@ -115,24 +115,30 @@
   }
 
   async function loadStats() {
-    const lists = ["top-artists", "top-tracks", "genre-breakdown", "recently-played", "playlist-appearances"];
+    const lists = ["top-artists", "top-tracks", "genre-breakdown", "recently-played"];
     lists.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = skeleton();
     });
 
-    const [artists, tracks, genres, recent, playlists] = await Promise.all([
+    const [artists, tracks, genres, recent] = await Promise.all([
       api(`/api/top-artists?range=${currentRange}`),
       api(`/api/top-tracks?range=${currentRange}`),
       api(`/api/genre-breakdown?range=${currentRange}`),
       api("/api/recently-played"),
-      api("/api/playlist-appearances"),
     ]);
 
     if (artists) $("#top-artists").innerHTML = renderArtists(artists.items || []);
     if (tracks) $("#top-tracks").innerHTML = renderTracks(tracks.items || []);
     if (genres) $("#genre-breakdown").innerHTML = renderGenres(genres || []);
     if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
+  }
+
+  async function loadPlaylists() {
+    $("#playlist-appearances").innerHTML = skeleton();
+    $("#playlist-subtitle").textContent = "Scanning your playlists…";
+
+    const playlists = await api("/api/playlist-appearances");
     if (playlists) {
       $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${playlists.totalPlaylists} playlists`;
       $("#playlist-appearances").innerHTML = renderPlaylistAppearances(playlists);
@@ -150,4 +156,5 @@
 
   loadProfile();
   loadStats();
+  loadPlaylists();
 })();

@@ -182,6 +182,10 @@ app.get("/api/genre-breakdown", requireAuth, async (req, res) => {
 
 app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
   try {
+    if (req.session.playlistCache && Date.now() - req.session.playlistCacheTime < 300000) {
+      return res.json(req.session.playlistCache);
+    }
+
     const token = req.session.accessToken;
 
     // Fetch all user playlists (paginated)
@@ -233,7 +237,10 @@ app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
         ...trackMeta[id],
       }));
 
-    res.json({ items: sorted, totalPlaylists: playlists.length });
+    const result = { items: sorted, totalPlaylists: playlists.length };
+    req.session.playlistCache = result;
+    req.session.playlistCacheTime = Date.now();
+    res.json(result);
   } catch (err) {
     console.error("Playlist appearances error:", err.response?.data || err.message);
     res.status(500).json({ error: err.message });
