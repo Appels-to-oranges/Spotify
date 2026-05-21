@@ -474,6 +474,79 @@ body {
   margin-bottom: 1rem;
 }
 
+.searchable-select {
+  position: relative;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.searchable-input {
+  width: 100%;
+  padding: 0.45rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 50px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: all var(--transition);
+  box-sizing: border-box;
+}
+
+.searchable-input:hover,
+.searchable-input:focus {
+  border-color: var(--green);
+}
+
+.searchable-input::placeholder {
+  color: #888;
+}
+
+.searchable-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.searchable-dropdown.open {
+  display: block;
+}
+
+.searchable-option {
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.searchable-option:hover,
+.searchable-option.highlighted {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.searchable-option.active {
+  color: var(--green);
+}
+
+.searchable-option .genre-count-badge {
+  font-size: 0.7rem;
+  color: #666;
+  margin-left: 0.5rem;
+}
+
 .artist-picker {
   margin-bottom: 1rem;
 }

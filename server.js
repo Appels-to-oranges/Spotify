@@ -364,20 +364,6 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([decade, count]) => ({ decade, count }));
 
-  // Playlist appearances (songs in 2+)
-  const appearances = [...tracks]
-    .filter((t) => t.playlistCount >= 2)
-    .sort((a, b) => b.playlistCount - a.playlistCount)
-    .slice(0, 20)
-    .map((t) => ({
-      name: t.name,
-      artists: t.artistNames.join(", "),
-      image: t.albumImage,
-      count: t.playlistCount,
-      totalPlaylists: store.totalPlaylists,
-      firstAdded: t.firstAdded,
-    }));
-
   // Available filter options (computed from unfiltered data for stable dropdowns)
   const allTracks = Object.values(trackMap);
   const allGenres = new Set();
@@ -395,7 +381,6 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
     topArtists,
     genres,
     decades,
-    appearances,
     savedTracks: store.savedTracks,
     savedAlbums: store.savedAlbums,
     totalPlaylists: store.totalPlaylists,
@@ -537,13 +522,16 @@ app.get("/api/trends", requireAuth, (req, res) => {
     artistTimeline = sortedArtistMonths.map((m) => perMonth[m] || 0);
   }
 
-  // Filter option lists for the trends section
-  const trendGenres = new Set();
-  const trendDecades = new Set();
+  // Filter option lists for the trends section (genres sorted by track count)
+  const trendGenreCounts = {};
+  const trendDecadeSet = new Set();
   enriched.forEach((t) => {
-    t.genres.forEach((g) => trendGenres.add(g));
-    if (t.decade) trendDecades.add(t.decade);
+    t.genres.forEach((g) => { trendGenreCounts[g] = (trendGenreCounts[g] || 0) + 1; });
+    if (t.decade) trendDecadeSet.add(t.decade);
   });
+  const trendGenresSorted = Object.entries(trendGenreCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([g, count]) => ({ name: g, count }));
 
   // Artist list for dropdown
   const artistTrackCounts = {};
@@ -572,8 +560,8 @@ app.get("/api/trends", requireAuth, (req, res) => {
     artistName,
     artistList,
     filterOptions: {
-      genres: [...trendGenres].sort(),
-      decades: [...trendDecades].sort(),
+      genres: trendGenresSorted,
+      decades: [...trendDecadeSet].sort(),
     },
   });
 });

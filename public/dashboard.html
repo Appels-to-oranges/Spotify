@@ -85,11 +85,6 @@
         <ul class="genre-list" id="decade-breakdown"></ul>
       </div>
 
-      <div class="card">
-        <h2>Playlist Appearances</h2>
-        <p class="card-subtitle" id="playlist-subtitle"></p>
-        <ul class="stat-list" id="playlist-appearances"></ul>
-      </div>
     </div>
     <!-- ===== Trends Section ===== -->
     <div class="section-header" style="margin-top:2rem">
@@ -100,9 +95,11 @@
       <div class="card card-wide">
         <h2>Genre Trends</h2>
         <div class="chart-filters">
-          <select class="filter-select" id="trend-genre-filter">
-            <option value="">Top 8 genres</option>
-          </select>
+          <div class="searchable-select" id="trend-genre-picker">
+            <input type="text" class="searchable-input" placeholder="Search genres…" autocomplete="off" />
+            <div class="searchable-dropdown"></div>
+            <input type="hidden" id="trend-genre-filter" value="" />
+          </div>
           <select class="filter-select" id="trend-decade-filter">
             <option value="">All decades</option>
           </select>

@@ -111,23 +111,6 @@
       .join("");
   }
 
-  function renderAppearances(items) {
-    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No songs appear in multiple playlists</div></div></li>';
-    return items
-      .map(
-        (t, i) => `
-      <li class="stat-item">
-        <span class="stat-rank">${i + 1}</span>
-        <img class="stat-img" src="${t.image}" alt="${t.name}" />
-        <div class="stat-info">
-          <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists} · in ${t.count} of ${t.totalPlaylists} playlists${t.firstAdded ? ` · added ${formatDate(t.firstAdded)}` : ""}</div>
-        </div>
-      </li>`
-      )
-      .join("");
-  }
-
   function renderRecent(items) {
     return items
       .map((r) => {
@@ -206,7 +189,7 @@
     const genre = $("#genre-filter").value;
     const decade = $("#decade-filter").value;
 
-    ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown", "playlist-appearances"].forEach((id) => {
+    ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown"].forEach((id) => {
       document.getElementById(id).innerHTML = skeleton();
     });
 
@@ -227,14 +210,6 @@
     $("#top-tracks").innerHTML = renderCuratedTracks(data.topTracks || []);
     $("#genre-breakdown").innerHTML = renderBarChart(data.genres || [], "genre", "count");
     $("#decade-breakdown").innerHTML = renderBarChart(data.decades || [], "decade", "count");
-
-    if (data.appearances?.length) {
-      $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${data.totalPlaylists} playlists`;
-      $("#playlist-appearances").innerHTML = renderAppearances(data.appearances);
-    } else {
-      $("#playlist-subtitle").textContent = "";
-      $("#playlist-appearances").innerHTML = '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No songs appear in multiple playlists</div></div></li>';
-    }
 
     $("#filter-clear").style.display = genre || decade ? "" : "none";
   }
@@ -320,6 +295,7 @@
     renderDecadeChart(data);
     populateTrendFilters(data.filterOptions);
     populateArtistPicker(data.artistList);
+    initSearchableGenre();
   }
 
   function renderGenreChart(data) {
@@ -342,14 +318,56 @@
     });
   }
 
-  function populateTrendFilters(options) {
-    const gf = $("#trend-genre-filter");
-    const df = $("#trend-decade-filter");
-    const currentG = gf.value;
-    const currentD = df.value;
+  let trendGenreOptions = [];
 
-    gf.innerHTML = '<option value="">Top 8 genres</option>' +
-      options.genres.map((g) => `<option value="${g}"${g === currentG ? " selected" : ""}>${g}</option>`).join("");
+  function initSearchableGenre() {
+    const wrapper = document.getElementById("trend-genre-picker");
+    const input = wrapper.querySelector(".searchable-input");
+    const dropdown = wrapper.querySelector(".searchable-dropdown");
+    const hidden = $("#trend-genre-filter");
+
+    function render(filter) {
+      const q = (filter || "").toLowerCase();
+      const filtered = q
+        ? trendGenreOptions.filter((g) => g.name.toLowerCase().includes(q))
+        : trendGenreOptions;
+
+      const allItem = `<div class="searchable-option${!hidden.value ? " active" : ""}" data-value="">All genres</div>`;
+      dropdown.innerHTML = allItem + filtered.map((g) =>
+        `<div class="searchable-option${hidden.value === g.name ? " active" : ""}" data-value="${g.name}">${g.name}<span class="genre-count-badge">${g.count}</span></div>`
+      ).join("");
+    }
+
+    input.addEventListener("focus", () => {
+      render(input.value);
+      dropdown.classList.add("open");
+    });
+
+    input.addEventListener("input", () => {
+      render(input.value);
+      dropdown.classList.add("open");
+    });
+
+    dropdown.addEventListener("click", (e) => {
+      const opt = e.target.closest(".searchable-option");
+      if (!opt) return;
+      const val = opt.dataset.value;
+      hidden.value = val;
+      input.value = val || "";
+      input.placeholder = val ? "Search genres…" : "Search genres…";
+      dropdown.classList.remove("open");
+      reloadTrendCharts();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!wrapper.contains(e.target)) dropdown.classList.remove("open");
+    });
+  }
+
+  function populateTrendFilters(options) {
+    trendGenreOptions = options.genres;
+    const df = $("#trend-decade-filter");
+    const currentD = df.value;
 
     df.innerHTML = '<option value="">All decades</option>' +
       options.decades.map((d) => `<option value="${d}"${d === currentD ? " selected" : ""}>${d}</option>`).join("");
@@ -435,7 +453,6 @@
     loadPlaylistAnalysis();
   });
 
-  $("#trend-genre-filter").addEventListener("change", reloadTrendCharts);
   $("#trend-decade-filter").addEventListener("change", reloadTrendCharts);
 
   $("#artist-picker-select").addEventListener("change", (e) => {
