@@ -134,15 +134,38 @@
     if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
   }
 
-  async function loadPlaylists() {
-    $("#playlist-appearances").innerHTML = skeleton();
-    $("#playlist-subtitle").textContent = "Scanning your playlists…";
+  function loadPlaylists() {
+    $("#playlist-appearances").innerHTML = "";
+    $("#playlist-subtitle").innerHTML = `
+      <span class="progress-text">Connecting…</span>
+      <div class="progress-bar-container">
+        <div class="progress-bar" style="width:0%"></div>
+      </div>`;
 
-    const playlists = await api("/api/playlist-appearances");
-    if (playlists) {
-      $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${playlists.totalPlaylists} playlists`;
-      $("#playlist-appearances").innerHTML = renderPlaylistAppearances(playlists);
-    }
+    const source = new EventSource("/api/playlist-appearances");
+
+    source.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+
+      if (data.type === "progress") {
+        $(".progress-text").textContent = data.phase;
+        $(".progress-bar").style.width = data.percent + "%";
+      } else if (data.type === "done") {
+        source.close();
+        $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${data.totalPlaylists} playlists`;
+        $("#playlist-appearances").innerHTML = renderPlaylistAppearances(data);
+      } else if (data.type === "error") {
+        source.close();
+        $("#playlist-subtitle").textContent = "Failed to load playlist data";
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      if (!$("#playlist-appearances").children.length) {
+        $("#playlist-subtitle").textContent = "Failed to connect";
+      }
+    };
   }
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {

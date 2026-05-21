@@ -181,26 +181,47 @@ app.get("/api/genre-breakdown", requireAuth, async (req, res) => {
 });
 
 app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  function sendEvent(type, data) {
+    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+  }
+
   try {
     if (req.session.playlistCache && Date.now() - req.session.playlistCacheTime < 300000) {
-      return res.json(req.session.playlistCache);
+      sendEvent("done", req.session.playlistCache);
+      return res.end();
     }
 
     const token = req.session.accessToken;
+    const me = await spotifyApi("/me", token);
+    const userId = me.id;
 
-    // Fetch all user playlists (paginated)
-    const playlists = [];
+    sendEvent("progress", { phase: "Fetching playlists…", percent: 0 });
+
+    const allPlaylists = [];
     let url = "/me/playlists?limit=50";
     while (url) {
       const page = await spotifyApi(url, token);
-      playlists.push(...page.items);
+      allPlaylists.push(...page.items);
       url = page.next
         ? page.next.replace("https://api.spotify.com/v1", "")
         : null;
     }
 
+    const playlists = allPlaylists.filter((pl) => pl.owner?.id === userId);
+
+    sendEvent("progress", {
+      phase: `Scanning ${playlists.length} of your playlists (${allPlaylists.length - playlists.length} followed playlists excluded)…`,
+      percent: 5,
+    });
+
     const trackCounts = {};
     const trackMeta = {};
+    let processed = 0;
 
     async function processPlaylist(pl) {
       let tracksUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(name),album(images))),next&limit=100`;
@@ -223,9 +244,14 @@ app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
           ? page.next.replace("https://api.spotify.com/v1", "")
           : null;
       }
+      processed++;
+      const percent = Math.round(5 + (processed / playlists.length) * 95);
+      sendEvent("progress", {
+        phase: `Scanning playlist ${processed} of ${playlists.length}…`,
+        percent,
+      });
     }
 
-    // Process playlists in parallel batches of 5 to avoid rate limits
     const BATCH_SIZE = 5;
     for (let i = 0; i < playlists.length; i += BATCH_SIZE) {
       const batch = playlists.slice(i, i + BATCH_SIZE);
@@ -246,10 +272,12 @@ app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
     const result = { items: sorted, totalPlaylists: playlists.length };
     req.session.playlistCache = result;
     req.session.playlistCacheTime = Date.now();
-    res.json(result);
+    sendEvent("done", result);
+    res.end();
   } catch (err) {
     console.error("Playlist appearances error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.message });
+    sendEvent("error", { message: err.message });
+    res.end();
   }
 });
 
