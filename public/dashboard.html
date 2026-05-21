@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Stats — Spotify Stats</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Profile bar -->
+    <div class="profile-bar">
+      <div class="profile-info" id="profile-info">
+        <div class="skeleton" style="width:48px;height:48px;border-radius:50%"></div>
+        <span class="profile-name">Loading…</span>
+      </div>
+      <a href="/logout" class="logout-btn">Log out</a>
+    </div>
+
+    <!-- Time range selector -->
+    <div class="time-range-tabs">
+      <button class="tab-btn active" data-range="short_term">Last 4 weeks</button>
+      <button class="tab-btn" data-range="medium_term">Last 6 months</button>
+      <button class="tab-btn" data-range="long_term">All time</button>
+    </div>
+
+    <!-- Cards -->
+    <div class="sections-grid">
+      <div class="card">
+        <h2>Top Artists</h2>
+        <ul class="stat-list" id="top-artists"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Top Tracks</h2>
+        <ul class="stat-list" id="top-tracks"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Top Genres</h2>
+        <ul class="genre-list" id="genre-breakdown"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Recently Played</h2>
+        <ul class="stat-list" id="recently-played"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
