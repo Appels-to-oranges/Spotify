@@ -24,6 +24,20 @@
       <button class="tab-btn" data-range="long_term">All time</button>
     </div>
 
+    <!-- Library stats summary -->
+    <div class="library-stats" id="library-stats"></div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <select class="filter-select" id="genre-filter">
+        <option value="">All genres</option>
+      </select>
+      <select class="filter-select" id="decade-filter">
+        <option value="">All decades</option>
+      </select>
+      <button class="filter-clear" id="filter-clear" style="display:none">Clear filters</button>
+    </div>
+
     <!-- Cards -->
     <div class="sections-grid">
       <div class="card">
@@ -39,6 +53,11 @@
       <div class="card">
         <h2>Top Genres</h2>
         <ul class="genre-list" id="genre-breakdown"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Decade Breakdown</h2>
+        <ul class="genre-list" id="decade-breakdown"></ul>
       </div>
 
       <div class="card">

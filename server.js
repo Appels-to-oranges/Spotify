@@ -180,6 +180,48 @@ app.get("/api/genre-breakdown", requireAuth, async (req, res) => {
   }
 });
 
+app.get("/api/decade-breakdown", requireAuth, async (req, res) => {
+  const range = req.query.range || "medium_term";
+  try {
+    const data = await spotifyApi(
+      `/me/top/tracks?limit=50&time_range=${range}`,
+      req.session.accessToken
+    );
+
+    const decadeCount = {};
+    data.items.forEach((track) => {
+      const year = parseInt(track.album?.release_date?.substring(0, 4), 10);
+      if (!year) return;
+      const decade = Math.floor(year / 10) * 10;
+      const label = `${decade}s`;
+      decadeCount[label] = (decadeCount[label] || 0) + 1;
+    });
+
+    const sorted = Object.entries(decadeCount)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([decade, count]) => ({ decade, count }));
+
+    res.json(sorted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/library-stats", requireAuth, async (req, res) => {
+  try {
+    const [tracks, albums] = await Promise.all([
+      spotifyApi("/me/tracks?limit=1", req.session.accessToken),
+      spotifyApi("/me/albums?limit=1", req.session.accessToken),
+    ]);
+    res.json({
+      savedTracks: tracks.total || 0,
+      savedAlbums: albums.total || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");

@@ -2,6 +2,10 @@
   const $ = (sel) => document.querySelector(sel);
   let currentRange = "short_term";
 
+  let rawArtists = [];
+  let rawTracks = [];
+  let rawGenres = [];
+
   async function api(path) {
     const res = await fetch(path);
     if (res.status === 401) {
@@ -15,7 +19,16 @@
     return Array.from({ length: count }, () => '<li class="skeleton"></li>').join("");
   }
 
+  function getDecade(track) {
+    const year = parseInt(track.album?.release_date?.substring(0, 4), 10);
+    if (!year) return null;
+    return `${Math.floor(year / 10) * 10}s`;
+  }
+
+  // ---------- Renderers ----------
+
   function renderArtists(items) {
+    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No artists match filters</div></div></li>';
     return items
       .map(
         (a, i) => `
@@ -32,6 +45,7 @@
   }
 
   function renderTracks(items) {
+    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No tracks match filters</div></div></li>';
     return items
       .map(
         (t, i) => `
@@ -47,17 +61,18 @@
       .join("");
   }
 
-  function renderGenres(items) {
-    const max = items[0]?.count || 1;
+  function renderBarChart(items, labelKey, countKey) {
+    if (!items.length) return '<li class="genre-item"><span class="genre-label">No data</span></li>';
+    const max = items[0]?.[countKey] || 1;
     return items
       .map(
         (g) => `
       <li class="genre-item">
-        <span class="genre-label">${g.genre}</span>
+        <span class="genre-label">${g[labelKey]}</span>
         <div class="genre-bar-container">
-          <div class="genre-bar" style="width:${(g.count / max) * 100}%"></div>
+          <div class="genre-bar" style="width:${(g[countKey] / max) * 100}%"></div>
         </div>
-        <span class="genre-count">${g.count}</span>
+        <span class="genre-count">${g[countKey]}</span>
       </li>`
       )
       .join("");
@@ -104,6 +119,89 @@
       .join("");
   }
 
+  function renderLibraryStats(data) {
+    return `
+      <div class="library-stat">
+        <span class="library-stat-number">${data.savedTracks.toLocaleString()}</span>
+        <span class="library-stat-label">Saved Tracks</span>
+      </div>
+      <div class="library-stat">
+        <span class="library-stat-number">${data.savedAlbums.toLocaleString()}</span>
+        <span class="library-stat-label">Saved Albums</span>
+      </div>`;
+  }
+
+  // ---------- Filters ----------
+
+  function populateFilters() {
+    const genreSelect = $("#genre-filter");
+    const decadeSelect = $("#decade-filter");
+    const currentGenre = genreSelect.value;
+    const currentDecade = decadeSelect.value;
+
+    const genres = new Set();
+    rawArtists.forEach((a) => a.genres?.forEach((g) => genres.add(g)));
+    const sortedGenres = [...genres].sort();
+
+    genreSelect.innerHTML = '<option value="">All genres</option>' +
+      sortedGenres.map((g) => `<option value="${g}">${g}</option>`).join("");
+
+    const decades = new Set();
+    rawTracks.forEach((t) => {
+      const d = getDecade(t);
+      if (d) decades.add(d);
+    });
+    const sortedDecades = [...decades].sort();
+
+    decadeSelect.innerHTML = '<option value="">All decades</option>' +
+      sortedDecades.map((d) => `<option value="${d}">${d}</option>`).join("");
+
+    genreSelect.value = sortedGenres.includes(currentGenre) ? currentGenre : "";
+    decadeSelect.value = sortedDecades.includes(currentDecade) ? currentDecade : "";
+  }
+
+  function applyFilters() {
+    const genre = $("#genre-filter").value;
+    const decade = $("#decade-filter").value;
+    const clearBtn = $("#filter-clear");
+    clearBtn.style.display = genre || decade ? "" : "none";
+
+    let filteredArtists = rawArtists;
+    let filteredTracks = rawTracks;
+
+    if (genre) {
+      const matchingArtistIds = new Set();
+      filteredArtists = rawArtists.filter((a) => {
+        const match = a.genres?.includes(genre);
+        if (match) matchingArtistIds.add(a.id);
+        return match;
+      });
+      filteredTracks = filteredTracks.filter((t) =>
+        t.artists?.some((a) => matchingArtistIds.has(a.id))
+      );
+    }
+
+    if (decade) {
+      filteredTracks = filteredTracks.filter((t) => getDecade(t) === decade);
+    }
+
+    $("#top-artists").innerHTML = renderArtists(filteredArtists);
+    $("#top-tracks").innerHTML = renderTracks(filteredTracks);
+
+    if (genre) {
+      const filtered = rawGenres.filter((g) => g.genre === genre);
+      $("#genre-breakdown").innerHTML = renderBarChart(
+        filtered.length ? filtered : rawGenres,
+        "genre",
+        "count"
+      );
+    } else {
+      $("#genre-breakdown").innerHTML = renderBarChart(rawGenres, "genre", "count");
+    }
+  }
+
+  // ---------- Loaders ----------
+
   async function loadProfile() {
     const me = await api("/api/me");
     if (!me) return;
@@ -114,24 +212,41 @@
     `;
   }
 
+  async function loadLibraryStats() {
+    const data = await api("/api/library-stats");
+    if (data) {
+      $("#library-stats").innerHTML = renderLibraryStats(data);
+    }
+  }
+
   async function loadStats() {
-    const lists = ["top-artists", "top-tracks", "genre-breakdown", "recently-played"];
+    const lists = ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown", "recently-played"];
     lists.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = skeleton();
     });
 
-    const [artists, tracks, genres, recent] = await Promise.all([
+    const [artists, tracks, genres, decades, recent] = await Promise.all([
       api(`/api/top-artists?range=${currentRange}`),
       api(`/api/top-tracks?range=${currentRange}`),
       api(`/api/genre-breakdown?range=${currentRange}`),
+      api(`/api/decade-breakdown?range=${currentRange}`),
       api("/api/recently-played"),
     ]);
 
-    if (artists) $("#top-artists").innerHTML = renderArtists(artists.items || []);
-    if (tracks) $("#top-tracks").innerHTML = renderTracks(tracks.items || []);
-    if (genres) $("#genre-breakdown").innerHTML = renderGenres(genres || []);
+    rawArtists = artists?.items || [];
+    rawTracks = tracks?.items || [];
+    rawGenres = genres || [];
+
+    populateFilters();
+
+    if (artists) $("#top-artists").innerHTML = renderArtists(rawArtists);
+    if (tracks) $("#top-tracks").innerHTML = renderTracks(rawTracks);
+    if (genres) $("#genre-breakdown").innerHTML = renderBarChart(rawGenres, "genre", "count");
+    if (decades) $("#decade-breakdown").innerHTML = renderBarChart(decades, "decade", "count");
     if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
+
+    applyFilters();
   }
 
   function loadPlaylists() {
@@ -168,16 +283,31 @@
     };
   }
 
+  // ---------- Event listeners ----------
+
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentRange = btn.dataset.range;
+      $("#genre-filter").value = "";
+      $("#decade-filter").value = "";
+      $("#filter-clear").style.display = "none";
       loadStats();
     });
   });
 
+  $("#genre-filter").addEventListener("change", applyFilters);
+  $("#decade-filter").addEventListener("change", applyFilters);
+  $("#filter-clear").addEventListener("click", () => {
+    $("#genre-filter").value = "";
+    $("#decade-filter").value = "";
+    $("#filter-clear").style.display = "none";
+    applyFilters();
+  });
+
   loadProfile();
+  loadLibraryStats();
   loadStats();
   loadPlaylists();
 })();
