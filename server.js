@@ -199,11 +199,10 @@ app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
         : null;
     }
 
-    // Fetch tracks from each playlist and count appearances per track ID
     const trackCounts = {};
     const trackMeta = {};
 
-    for (const pl of playlists) {
+    async function processPlaylist(pl) {
       let tracksUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(name),album(images))),next&limit=100`;
       while (tracksUrl) {
         const page = await spotifyApi(tracksUrl, token);
@@ -224,6 +223,13 @@ app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
           ? page.next.replace("https://api.spotify.com/v1", "")
           : null;
       }
+    }
+
+    // Process playlists in parallel batches of 5 to avoid rate limits
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < playlists.length; i += BATCH_SIZE) {
+      const batch = playlists.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(processPlaylist));
     }
 
     const sorted = Object.entries(trackCounts)
