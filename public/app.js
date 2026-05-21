@@ -289,6 +289,7 @@
   let genreChart = null;
   let decadeChart = null;
   let artistChart = null;
+  let cachedTrendsData = null;
 
   function formatMonth(m) {
     const [y, mo] = m.split("-");
@@ -296,60 +297,83 @@
     return `${months[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
   }
 
+  function makeLineDatasets(series) {
+    return series.map((s, i) => ({
+      label: s.label,
+      data: s.data,
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
+      borderWidth: 2,
+      tension: 0.3,
+      fill: false,
+      pointRadius: 0,
+      pointHitRadius: 8,
+    }));
+  }
+
   async function loadTrends() {
     const data = await api("/api/trends");
     if (!data) return;
+    cachedTrendsData = data;
 
-    const labels = data.months.map(formatMonth);
+    renderGenreChart(data);
+    renderDecadeChart(data);
+    populateTrendFilters(data.filterOptions);
+    populateArtistPicker(data.artistList);
+  }
 
-    // Genre trends chart
+  function renderGenreChart(data) {
     if (genreChart) genreChart.destroy();
+    const labels = (data.genreMonths || []).map(formatMonth);
     genreChart = new Chart(document.getElementById("genre-trends-chart"), {
       type: "line",
-      data: {
-        labels,
-        datasets: data.genreSeries.map((s, i) => ({
-          label: s.label,
-          data: s.data,
-          borderColor: CHART_COLORS[i % CHART_COLORS.length],
-          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
-          borderWidth: 2,
-          tension: 0.3,
-          fill: false,
-          pointRadius: 0,
-          pointHitRadius: 8,
-        })),
-      },
+      data: { labels, datasets: makeLineDatasets(data.genreSeries || []) },
       options: chartDefaults,
     });
+  }
 
-    // Decade trends chart
+  function renderDecadeChart(data) {
     if (decadeChart) decadeChart.destroy();
+    const labels = (data.decadeMonths || []).map(formatMonth);
     decadeChart = new Chart(document.getElementById("decade-trends-chart"), {
       type: "line",
-      data: {
-        labels,
-        datasets: data.decadeSeries.map((s, i) => ({
-          label: s.label,
-          data: s.data,
-          borderColor: CHART_COLORS[i % CHART_COLORS.length],
-          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
-          borderWidth: 2,
-          tension: 0.3,
-          fill: false,
-          pointRadius: 0,
-          pointHitRadius: 8,
-        })),
-      },
+      data: { labels, datasets: makeLineDatasets(data.decadeSeries || []) },
       options: chartDefaults,
     });
+  }
 
-    // Populate artist picker
+  function populateTrendFilters(options) {
+    const gf = $("#trend-genre-filter");
+    const df = $("#trend-decade-filter");
+    const currentG = gf.value;
+    const currentD = df.value;
+
+    gf.innerHTML = '<option value="">Top 8 genres</option>' +
+      options.genres.map((g) => `<option value="${g}"${g === currentG ? " selected" : ""}>${g}</option>`).join("");
+
+    df.innerHTML = '<option value="">All decades</option>' +
+      options.decades.map((d) => `<option value="${d}"${d === currentD ? " selected" : ""}>${d}</option>`).join("");
+  }
+
+  function populateArtistPicker(artistList) {
     const picker = $("#artist-picker-select");
+    const current = picker.value;
     picker.innerHTML = '<option value="">Select an artist…</option>' +
-      data.artistList.map((a) =>
-        `<option value="${a.id}">${a.name} (${a.trackCount} tracks)</option>`
+      artistList.map((a) =>
+        `<option value="${a.id}"${a.id === current ? " selected" : ""}>${a.name} (${a.trackCount} tracks)</option>`
       ).join("");
+  }
+
+  async function reloadGenreChart() {
+    const genre = $("#trend-genre-filter").value;
+    const decade = $("#trend-decade-filter").value;
+    const params = new URLSearchParams();
+    if (genre) params.set("genre", genre);
+    if (decade) params.set("decade", decade);
+
+    const data = await api(`/api/trends?${params}`);
+    if (!data) return;
+    renderGenreChart(data);
   }
 
   async function loadArtistTimeline(artistId) {
@@ -364,7 +388,7 @@
     if (!data || !data.artistTimeline) return;
 
     emptyMsg.style.display = "none";
-    const labels = data.months.map(formatMonth);
+    const labels = (data.artistMonths || []).map(formatMonth);
 
     if (artistChart) artistChart.destroy();
     artistChart = new Chart(document.getElementById("artist-timeline-chart"), {
@@ -409,6 +433,9 @@
     $("#filter-clear").style.display = "none";
     loadPlaylistAnalysis();
   });
+
+  $("#trend-genre-filter").addEventListener("change", reloadGenreChart);
+  $("#trend-decade-filter").addEventListener("change", reloadGenreChart);
 
   $("#artist-picker-select").addEventListener("change", (e) => {
     loadArtistTimeline(e.target.value);

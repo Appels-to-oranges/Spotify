@@ -467,6 +467,13 @@ body {
   height: 320px;
 }
 
+.chart-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .artist-picker {
   margin-bottom: 1rem;
 }

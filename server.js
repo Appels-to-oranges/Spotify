@@ -420,6 +420,8 @@ app.get("/api/trends", requireAuth, (req, res) => {
   const store = userDataStore.get(userId);
   const { tracks: trackMap, artists: artistMap } = store;
   const artistFilter = req.query.artist || "";
+  const genreFilter = req.query.genre || "";
+  const decadeFilter = req.query.decade || "";
 
   const allTracks = Object.values(trackMap);
 
@@ -433,31 +435,57 @@ app.get("/api/trends", requireAuth, (req, res) => {
       });
       const year = parseInt(t.releaseDate?.substring(0, 4), 10) || 0;
       const decade = year ? `${Math.floor(year / 10) * 10}s` : null;
-      const month = t.firstAdded.substring(0, 7); // "YYYY-MM"
+      const month = t.firstAdded.substring(0, 7);
       return { ...t, genres: [...genres], decade, month };
     })
     .sort((a, b) => a.month.localeCompare(b.month));
 
-  // Collect all months for consistent x-axis
+  // Helper: trim months where all series values are 0
+  function trimSeries(months, seriesArr) {
+    if (!months.length) return { months: [], series: seriesArr };
+    let first = 0;
+    let last = months.length - 1;
+    while (first < months.length && seriesArr.every((s) => !s.data[first])) first++;
+    while (last > first && seriesArr.every((s) => !s.data[last])) last--;
+    const trimmedMonths = months.slice(first, last + 1);
+    const trimmedSeries = seriesArr.map((s) => ({
+      ...s,
+      data: s.data.slice(first, last + 1),
+    }));
+    return { months: trimmedMonths, series: trimmedSeries };
+  }
+
+  function trimFlat(months, dataArr) {
+    if (!months.length) return { months: [], data: [] };
+    let first = 0;
+    let last = months.length - 1;
+    while (first < months.length && !dataArr[first]) first++;
+    while (last > first && !dataArr[last]) last--;
+    return { months: months.slice(first, last + 1), data: dataArr.slice(first, last + 1) };
+  }
+
+  // Collect all months
   const monthSet = new Set();
   enriched.forEach((t) => monthSet.add(t.month));
-  const months = [...monthSet].sort();
+  const allMonths = [...monthSet].sort();
 
-  // Genre over time: count tracks per genre per month (top 8 genres overall)
+  // Apply genre/decade filters for the genre chart
+  let genreFiltered = enriched;
+  if (decadeFilter) genreFiltered = genreFiltered.filter((t) => t.decade === decadeFilter);
+  if (genreFilter) genreFiltered = genreFiltered.filter((t) => t.genres.includes(genreFilter));
+
+  // Genre over time
   const genreTotals = {};
-  enriched.forEach((t) => {
-    t.genres.forEach((g) => {
-      genreTotals[g] = (genreTotals[g] || 0) + 1;
-    });
+  genreFiltered.forEach((t) => {
+    t.genres.forEach((g) => { genreTotals[g] = (genreTotals[g] || 0) + 1; });
   });
-  const topGenreNames = Object.entries(genreTotals)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([g]) => g);
+  const topGenreNames = genreFilter
+    ? [genreFilter]
+    : Object.entries(genreTotals).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([g]) => g);
 
   const genreOverTime = {};
   topGenreNames.forEach((g) => { genreOverTime[g] = {}; });
-  enriched.forEach((t) => {
+  genreFiltered.forEach((t) => {
     t.genres.forEach((g) => {
       if (genreOverTime[g]) {
         genreOverTime[g][t.month] = (genreOverTime[g][t.month] || 0) + 1;
@@ -465,12 +493,13 @@ app.get("/api/trends", requireAuth, (req, res) => {
     });
   });
 
-  const genreSeries = topGenreNames.map((genre) => ({
+  const rawGenreSeries = topGenreNames.map((genre) => ({
     label: genre,
-    data: months.map((m) => genreOverTime[genre][m] || 0),
+    data: allMonths.map((m) => genreOverTime[genre][m] || 0),
   }));
+  const genreTrimmed = trimSeries(allMonths, rawGenreSeries);
 
-  // Decade over time
+  // Decade over time (unfiltered — shows all decades)
   const decadeSet = new Set();
   enriched.forEach((t) => { if (t.decade) decadeSet.add(t.decade); });
   const decadeNames = [...decadeSet].sort();
@@ -483,13 +512,15 @@ app.get("/api/trends", requireAuth, (req, res) => {
     }
   });
 
-  const decadeSeries = decadeNames.map((decade) => ({
+  const rawDecadeSeries = decadeNames.map((decade) => ({
     label: decade,
-    data: months.map((m) => decadeOverTime[decade][m] || 0),
+    data: allMonths.map((m) => decadeOverTime[decade][m] || 0),
   }));
+  const decadeTrimmed = trimSeries(allMonths, rawDecadeSeries);
 
   // Artist timeline (if requested)
   let artistTimeline = null;
+  let artistMonths = null;
   let artistName = "";
   if (artistFilter && artistMap[artistFilter]) {
     artistName = artistMap[artistFilter].name;
@@ -499,10 +530,21 @@ app.get("/api/trends", requireAuth, (req, res) => {
         perMonth[t.month] = (perMonth[t.month] || 0) + 1;
       }
     });
-    artistTimeline = months.map((m) => perMonth[m] || 0);
+    const rawData = allMonths.map((m) => perMonth[m] || 0);
+    const trimmed = trimFlat(allMonths, rawData);
+    artistMonths = trimmed.months;
+    artistTimeline = trimmed.data;
   }
 
-  // Artist list for dropdown (sorted by track count)
+  // Filter option lists for the trends section
+  const trendGenres = new Set();
+  const trendDecades = new Set();
+  enriched.forEach((t) => {
+    t.genres.forEach((g) => trendGenres.add(g));
+    if (t.decade) trendDecades.add(t.decade);
+  });
+
+  // Artist list for dropdown
   const artistTrackCounts = {};
   allTracks.forEach((t) => {
     t.artistIds.forEach((aid) => {
@@ -520,12 +562,18 @@ app.get("/api/trends", requireAuth, (req, res) => {
     }));
 
   res.json({
-    months,
-    genreSeries,
-    decadeSeries,
+    genreMonths: genreTrimmed.months,
+    genreSeries: genreTrimmed.series,
+    decadeMonths: decadeTrimmed.months,
+    decadeSeries: decadeTrimmed.series,
+    artistMonths,
     artistTimeline,
     artistName,
     artistList,
+    filterOptions: {
+      genres: [...trendGenres].sort(),
+      decades: [...trendDecades].sort(),
+    },
   });
 });
 
