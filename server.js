@@ -596,6 +596,7 @@ app.get("/api/momentum", requireAuth, (req, res) => {
     "4 weeks": new Date(now - 28 * 86400000),
     "6 months": new Date(now - 182 * 86400000),
     "1 year": new Date(now - 365 * 86400000),
+    "3 years": new Date(now - 1095 * 86400000),
   };
 
   const earliest = allTracks.reduce((min, t) => t.addedAt < min ? t.addedAt : min, allTracks[0].addedAt);

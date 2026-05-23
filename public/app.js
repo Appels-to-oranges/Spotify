@@ -425,7 +425,7 @@
   // ---------- Momentum ----------
 
   let momentumData = null;
-  let currentMomentumPeriod = "4 weeks";
+  let currentMomentumPeriod = "1 year";
   let currentMomentumCat = "genres";
 
   function renderMomentumList(items, direction) {
