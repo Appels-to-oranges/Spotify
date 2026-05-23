@@ -86,16 +86,20 @@
       </div>
     </div>
 
-    <!-- ===== Genre Momentum Section ===== -->
+    <!-- ===== Momentum Section ===== -->
     <div class="section-header" style="margin-top:1.5rem">
-      <h2 class="section-title">Genre Momentum</h2>
+      <h2 class="section-title">Momentum</h2>
       <div class="time-range-tabs">
-        <button class="momentum-tab active" data-period="4 weeks">4 weeks</button>
-        <button class="momentum-tab" data-period="6 months">6 months</button>
-        <button class="momentum-tab" data-period="1 year">1 year</button>
-        <select class="filter-select" id="momentum-sort" style="margin-left:0.25rem">
-          <option value="change">Sort by % change</option>
-          <option value="total">Sort by top genres</option>
+        <button class="momentum-cat active" data-cat="genres">Genres</button>
+        <button class="momentum-cat" data-cat="decades">Decades</button>
+        <button class="momentum-cat" data-cat="artists">Artists</button>
+        <span style="width:1px;background:var(--border);height:20px;margin:0 0.15rem"></span>
+        <button class="momentum-tab active" data-period="4 weeks">4w</button>
+        <button class="momentum-tab" data-period="6 months">6m</button>
+        <button class="momentum-tab" data-period="1 year">1y</button>
+        <select class="filter-select" id="momentum-sort" style="margin-left:0.15rem">
+          <option value="change">By % change</option>
+          <option value="total">By volume</option>
         </select>
       </div>
     </div>

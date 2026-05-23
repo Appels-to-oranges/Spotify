@@ -566,9 +566,9 @@ app.get("/api/trends", requireAuth, (req, res) => {
   });
 });
 
-// ---------- Genre Momentum endpoint ----------
+// ---------- Momentum endpoint (genres, decades, artists) ----------
 
-app.get("/api/genre-momentum", requireAuth, (req, res) => {
+app.get("/api/momentum", requireAuth, (req, res) => {
   const userId = req.session.userId;
   if (!userId || !userDataStore.has(userId)) {
     return res.status(400).json({ error: "No scan data." });
@@ -584,13 +584,15 @@ app.get("/api/genre-momentum", requireAuth, (req, res) => {
       t.artistIds.forEach((aid) => {
         artistMap[aid]?.genres?.forEach((g) => genres.add(g));
       });
-      return { genres: [...genres], addedAt: new Date(t.firstAdded) };
+      const year = parseInt(t.releaseDate?.substring(0, 4), 10) || 0;
+      const decade = year ? `${Math.floor(year / 10) * 10}s` : null;
+      return { genres: [...genres], decade, artistIds: t.artistIds, addedAt: new Date(t.firstAdded) };
     });
 
   if (!allTracks.length) return res.json({ periods: {} });
 
   const now = new Date();
-  const periods = {
+  const windows = {
     "4 weeks": new Date(now - 28 * 86400000),
     "6 months": new Date(now - 182 * 86400000),
     "1 year": new Date(now - 365 * 86400000),
@@ -599,44 +601,52 @@ app.get("/api/genre-momentum", requireAuth, (req, res) => {
   const earliest = allTracks.reduce((min, t) => t.addedAt < min ? t.addedAt : min, allTracks[0].addedAt);
   const totalDays = Math.max(1, (now - earliest) / 86400000);
 
-  // Count total adds per genre over all time
-  const genreTotalCounts = {};
-  allTracks.forEach((t) => {
-    t.genres.forEach((g) => { genreTotalCounts[g] = (genreTotalCounts[g] || 0) + 1; });
-  });
+  function computeMomentum(totalCounts, windowCounts, windowDays, minCount) {
+    return Object.entries(totalCounts)
+      .filter(([, c]) => c >= minCount)
+      .map(([name, totalCount]) => {
+        const windowCount = windowCounts[name] || 0;
+        const historicalRate = totalCount / totalDays;
+        const windowRate = windowCount / windowDays;
+        const expectedCount = Math.round(historicalRate * windowDays * 10) / 10;
+        const change = historicalRate > 0
+          ? Math.round(((windowRate - historicalRate) / historicalRate) * 100)
+          : (windowCount > 0 ? 100 : 0);
+        return { name, windowCount, expectedCount, totalCount, change };
+      });
+  }
 
-  // Only consider genres with at least 5 total tracks
-  const significantGenres = Object.entries(genreTotalCounts)
-    .filter(([, c]) => c >= 5)
-    .map(([g]) => g);
+  // All-time totals
+  const genreTotals = {};
+  const decadeTotals = {};
+  const artistTotals = {};
+  allTracks.forEach((t) => {
+    t.genres.forEach((g) => { genreTotals[g] = (genreTotals[g] || 0) + 1; });
+    if (t.decade) decadeTotals[t.decade] = (decadeTotals[t.decade] || 0) + 1;
+    t.artistIds.forEach((aid) => { artistTotals[aid] = (artistTotals[aid] || 0) + 1; });
+  });
 
   const result = {};
 
-  for (const [label, cutoff] of Object.entries(periods)) {
+  for (const [label, cutoff] of Object.entries(windows)) {
     const windowDays = Math.max(1, (now - cutoff) / 86400000);
     const windowTracks = allTracks.filter((t) => t.addedAt >= cutoff);
 
-    const windowGenreCounts = {};
+    const genreWindow = {};
+    const decadeWindow = {};
+    const artistWindow = {};
     windowTracks.forEach((t) => {
-      t.genres.forEach((g) => { windowGenreCounts[g] = (windowGenreCounts[g] || 0) + 1; });
+      t.genres.forEach((g) => { genreWindow[g] = (genreWindow[g] || 0) + 1; });
+      if (t.decade) decadeWindow[t.decade] = (decadeWindow[t.decade] || 0) + 1;
+      t.artistIds.forEach((aid) => { artistWindow[aid] = (artistWindow[aid] || 0) + 1; });
     });
 
-    const momentum = significantGenres.map((genre) => {
-      const totalCount = genreTotalCounts[genre];
-      const windowCount = windowGenreCounts[genre] || 0;
+    const genres = computeMomentum(genreTotals, genreWindow, windowDays, 5);
+    const decades = computeMomentum(decadeTotals, decadeWindow, windowDays, 3);
+    const artists = computeMomentum(artistTotals, artistWindow, windowDays, 3)
+      .map((a) => ({ ...a, name: artistMap[a.name]?.name || a.name }));
 
-      const historicalRate = totalCount / totalDays;
-      const windowRate = windowCount / windowDays;
-      const expectedCount = Math.round(historicalRate * windowDays * 10) / 10;
-
-      const change = historicalRate > 0
-        ? Math.round(((windowRate - historicalRate) / historicalRate) * 100)
-        : (windowCount > 0 ? 100 : 0);
-
-      return { genre, windowCount, expectedCount, totalCount, change };
-    });
-
-    result[label] = momentum;
+    result[label] = { genres, decades, artists };
   }
 
   res.json({ periods: result });

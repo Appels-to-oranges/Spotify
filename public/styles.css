@@ -453,7 +453,8 @@ body {
   flex-shrink: 0;
 }
 
-/* Momentum tabs (reuse tab-btn style) */
+/* Momentum category & period tabs */
+.momentum-cat,
 .momentum-tab {
   padding: 0.35rem 0.9rem;
   background: var(--surface);
@@ -463,6 +464,13 @@ body {
   font-size: 0.78rem;
   cursor: pointer;
   transition: all var(--transition);
+}
+
+.momentum-cat.active,
+.momentum-cat:hover {
+  background: rgba(129, 140, 248, 0.12);
+  border-color: #818cf8;
+  color: #818cf8;
 }
 
 .momentum-tab.active,

@@ -422,14 +422,15 @@
     });
   }
 
-  // ---------- Genre Momentum ----------
+  // ---------- Momentum ----------
 
   let momentumData = null;
   let currentMomentumPeriod = "4 weeks";
+  let currentMomentumCat = "genres";
 
   function renderMomentumList(items, direction) {
     if (!items || !items.length) {
-      return `<div class="momentum-empty">No ${direction === "up" ? "trending" : "cooling"} genres in this period</div>`;
+      return `<div class="momentum-empty">Nothing ${direction === "up" ? "trending up" : "cooling down"} in this period</div>`;
     }
     return items.map((m) => {
       const arrow = m.change > 0 ? "↑" : "↓";
@@ -438,7 +439,7 @@
       const expected = Math.round(m.expectedCount);
       return `<div class="momentum-item">
         <span class="momentum-arrow ${cls}">${arrow}</span>
-        <span class="momentum-genre">${m.genre}</span>
+        <span class="momentum-genre">${m.name}</span>
         <span class="momentum-detail">${m.windowCount} added · avg ${expected}</span>
         <span class="momentum-pct ${cls}">${pct}</span>
       </div>`;
@@ -447,9 +448,10 @@
 
   function renderMomentum() {
     if (!momentumData?.periods) return;
-    const all = momentumData.periods[currentMomentumPeriod];
-    if (!all) return;
+    const periodData = momentumData.periods[currentMomentumPeriod];
+    if (!periodData) return;
 
+    const all = periodData[currentMomentumCat] || [];
     const sortBy = document.getElementById("momentum-sort").value;
     let sorted;
     if (sortBy === "total") {
@@ -468,7 +470,7 @@
   async function loadMomentum() {
     document.getElementById("momentum-trending").innerHTML = skeleton(3);
     document.getElementById("momentum-cooling").innerHTML = skeleton(3);
-    const data = await api("/api/genre-momentum");
+    const data = await api("/api/momentum");
     if (!data) return;
     momentumData = data;
     renderMomentum();
@@ -482,6 +484,15 @@
       btn.classList.add("active");
       currentRange = btn.dataset.range;
       loadListeningHistory();
+    });
+  });
+
+  document.querySelectorAll(".momentum-cat").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".momentum-cat").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentMomentumCat = btn.dataset.cat;
+      renderMomentum();
     });
   });
 
