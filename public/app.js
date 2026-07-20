@@ -7,6 +7,7 @@
   const MUTE_KEY = "wavestation_mute";
 
   const audio = new Audio();
+  window.__wsAudio = audio;
   let currentStation = null;
   let favorites = [];
 

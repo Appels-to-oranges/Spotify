@@ -9,7 +9,16 @@
 </head>
 <body>
   <div class="app">
-    <!-- ===== Now-Playing Bar (top, always visible when playing) ===== -->
+    <!-- ===== Visualizer Hero ===== -->
+    <section class="visualizer-section" id="visualizer-section">
+      <canvas id="visualizer-canvas"></canvas>
+      <div class="viz-overlay">
+        <h1 class="brand-name">Wavestation</h1>
+        <p class="brand-tagline">Internet radio, zero friction</p>
+      </div>
+    </section>
+
+    <!-- ===== Now-Playing Bar ===== -->
     <header class="now-playing-bar hidden" id="now-playing-bar">
       <div class="np-left">
         <img class="np-favicon" id="np-favicon" src="" alt="" />
@@ -34,14 +43,6 @@
 
     <!-- ===== Main Content ===== -->
     <main class="main">
-      <div class="brand">
-        <svg class="brand-icon" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M5 25 Q15 10 25 25 Q35 40 45 25 Q55 10 65 25 Q75 40 85 25 Q90 18 95 25" stroke="url(#wave-grad)" stroke-width="4" stroke-linecap="round" fill="none"/>
-          <defs><linearGradient id="wave-grad" x1="0" y1="0" x2="100" y2="0"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#34d399"/></linearGradient></defs>
-        </svg>
-        <h1 class="brand-name">Wavestation</h1>
-        <p class="brand-tagline">Internet radio, zero friction</p>
-      </div>
 
       <!-- Search -->
       <div class="search-bar">
@@ -96,6 +97,8 @@
     </footer>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.min.js"></script>
   <script src="/app.js"></script>
+  <script src="/visualizer.js"></script>
 </body>
 </html>
