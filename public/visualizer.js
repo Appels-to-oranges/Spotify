@@ -10,6 +10,53 @@
   const SMOOTH = 0.18;
   const AMBIENT_SMOOTH = 0.05;
   const DECAY = 0.06;
+  const FREQ_LO = 30;
+  const FREQ_HI = 18000;
+  const NM_RED = 780;
+  const NM_VIOLET = 380;
+
+  /* ===== Hz ↔ Wavelength ↔ RGB =====
+   *
+   *  Unified formula mapping audio frequency to light wavelength:
+   *
+   *    λ(nm) = 780 − 400 · log(f / 30) / log(600)
+   *
+   *  30 Hz  → 780 nm  (deep red)
+   *  18 kHz → 380 nm  (violet)
+   *
+   *  Logarithmic scaling matches musical pitch perception (equal
+   *  visual distance per octave).  The nm→RGB step uses the CIE
+   *  spectral locus piecewise approximation (Bruton).
+   */
+
+  function hzToNm(hz) {
+    const t = Math.log(hz / FREQ_LO) / Math.log(FREQ_HI / FREQ_LO);
+    return NM_RED - t * (NM_RED - NM_VIOLET);
+  }
+
+  function nmToRGB(nm) {
+    let r, g, b;
+    if      (nm < 380) { r = 0; g = 0; b = 0; }
+    else if (nm < 440) { r = -(nm - 440) / 60; g = 0; b = 1; }
+    else if (nm < 490) { r = 0; g = (nm - 440) / 50; b = 1; }
+    else if (nm < 510) { r = 0; g = 1; b = -(nm - 510) / 20; }
+    else if (nm < 580) { r = (nm - 510) / 70; g = 1; b = 0; }
+    else if (nm < 645) { r = 1; g = -(nm - 645) / 65; b = 0; }
+    else if (nm <= 780){ r = 1; g = 0; b = 0; }
+    else               { r = 0; g = 0; b = 0; }
+
+    let f;
+    if      (nm >= 380 && nm < 420) f = 0.3 + 0.7 * (nm - 380) / 40;
+    else if (nm <= 700)             f = 1.0;
+    else if (nm <= 780)             f = 0.3 + 0.7 * (780 - nm) / 80;
+    else                            f = 0;
+
+    return [r * f, g * f, b * f];
+  }
+
+  function hzToRGB(hz) { return nmToRGB(hzToNm(hz)); }
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
 
   /* ===== Shaders ===== */
 
@@ -23,13 +70,14 @@
   const barFrag = `
     uniform float uOpacity;
     uniform float uSoftness;
+    uniform vec3  uColor;
     varying vec2 vUv;
     void main() {
       float dx = abs(vUv.x - 0.5) * 2.0;
       float a = 1.0 - smoothstep(1.0 - uSoftness, 1.0, dx);
       float dy = vUv.y;
       a *= 1.0 - smoothstep(0.7, 1.0, dy);
-      gl_FragColor = vec4(vec3(0.85), a * uOpacity);
+      gl_FragColor = vec4(uColor, a * uOpacity);
     }`;
 
   const bokehVert = `
@@ -41,16 +89,14 @@
 
   const bokehFrag = `
     uniform float uAlpha;
-    uniform float uBright;
+    uniform vec3  uColor;
     varying vec2 vUv;
     void main() {
       float d = length(vUv - 0.5) * 2.0;
       float a = 1.0 - smoothstep(0.0, 1.0, d);
       a = pow(a, 2.5);
-      gl_FragColor = vec4(vec3(uBright), a * uAlpha);
+      gl_FragColor = vec4(uColor, a * uAlpha);
     }`;
-
-  function rand(a, b) { return a + Math.random() * (b - a); }
 
   /* ===== Visualizer ===== */
 
@@ -68,6 +114,7 @@
       this.audioCtx = null;
       this.analyser = null;
       this.rawData = null;
+      this.sampleRate = 44100;
       this.binCount = FFT_SIZE / 2;
       this.smoothed = new Float32Array(this.binCount);
       this.connected = false;
@@ -80,11 +127,12 @@
       this.bokeh = [];
       this.bars = [];
       this.binMap = [];
+      this.barHz = new Float32Array(BAR_COUNT);
       this.displayAmp = new Float32Array(BAR_COUNT);
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
-      this._buildBinMap();
+      this._buildBinMap(this.sampleRate);
       this._buildBokeh();
       this._buildBars();
       this._loop();
@@ -103,20 +151,27 @@
       this.camera.updateProjectionMatrix();
     }
 
-    _buildBinMap() {
+    _buildBinMap(sr) {
+      this.sampleRate = sr;
+      const hzPerBin = sr / FFT_SIZE;
       this.binMap = [];
       for (let i = 0; i < BAR_COUNT; i++) {
-        const lo = Math.floor(Math.pow(i / BAR_COUNT, 1.8) * this.binCount);
-        const hi = Math.floor(Math.pow((i + 1) / BAR_COUNT, 1.8) * this.binCount);
-        this.binMap.push([lo, Math.max(hi, lo + 1)]);
+        const f0 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, i / BAR_COUNT);
+        const f1 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, (i + 1) / BAR_COUNT);
+        const b0 = Math.max(0, Math.floor(f0 / hzPerBin));
+        const b1 = Math.min(this.binCount, Math.max(Math.ceil(f1 / hzPerBin), b0 + 1));
+        this.binMap.push([b0, b1]);
+        this.barHz[i] = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, (i + 0.5) / BAR_COUNT);
       }
     }
 
     /* --- audio --- */
+
     connectAudio(el) {
       if (this.connected) return;
       try {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this._buildBinMap(this.audioCtx.sampleRate);
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = FFT_SIZE;
@@ -136,6 +191,7 @@
     }
 
     /* --- frequency --- */
+
     _freq() {
       if (this.connected && this.analyser && this.isPlaying) {
         this.analyser.getByteFrequencyData(this.rawData);
@@ -169,7 +225,7 @@
     _barAmp(idx) {
       const [lo, hi] = this.binMap[idx];
       let s = 0;
-      for (let i = lo; i < hi; i++) s += this.smoothed[i];
+      for (let i = lo; i < hi && i < this.binCount; i++) s += this.smoothed[i];
       return s / (hi - lo);
     }
 
@@ -178,10 +234,14 @@
     _buildBokeh() {
       const geo = new THREE.PlaneGeometry(1, 1);
       for (let i = 0; i < BOKEH_COUNT; i++) {
-        const bright = rand(0.2, 0.7);
-        const baseAlpha = rand(0.015, 0.18);
+        const bHz = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, Math.random());
+        const [cr, cg, cb] = hzToRGB(bHz);
+        const baseAlpha = rand(0.015, 0.14);
         const mat = new THREE.ShaderMaterial({
-          uniforms: { uAlpha: { value: baseAlpha }, uBright: { value: bright } },
+          uniforms: {
+            uAlpha: { value: baseAlpha },
+            uColor: { value: new THREE.Vector3(cr * 0.6, cg * 0.6, cb * 0.6) },
+          },
           vertexShader: bokehVert,
           fragmentShader: bokehFrag,
           transparent: true,
@@ -209,9 +269,16 @@
       const sharedGeo = new THREE.PlaneGeometry(1, 1);
       for (let i = 0; i < BAR_COUNT; i++) {
         const freq = i / BAR_COUNT;
+        const hz = this.barHz[i];
+        const [cr, cg, cb] = hzToRGB(hz);
+
         const softness = 0.55 * (1 - freq * 0.6);
         const mat = new THREE.ShaderMaterial({
-          uniforms: { uOpacity: { value: 0 }, uSoftness: { value: softness } },
+          uniforms: {
+            uOpacity: { value: 0 },
+            uSoftness: { value: softness },
+            uColor: { value: new THREE.Vector3(cr, cg, cb) },
+          },
           vertexShader: barVert,
           fragmentShader: barFrag,
           transparent: true,
@@ -249,7 +316,6 @@
         const bar = this.bars[i];
         const raw = this._barAmp(i);
 
-        // Fast attack, slow decay
         if (raw > this.displayAmp[i]) {
           this.displayAmp[i] = raw;
         } else {
@@ -257,26 +323,23 @@
         }
         const amp = this.displayAmp[i];
 
-        // Position: spread across width
         const x = -this.aspect + barSpacing * (i + 0.5);
         bar.mesh.position.x = x;
 
-        // Height from bottom
         const height = amp * 1.9;
         bar.mesh.scale.y = Math.max(0.001, height);
         bar.mesh.position.y = -1 + height * 0.5;
 
-        // Width: low freq wider, high freq thinner
         const baseW = barSpacing * (0.9 - bar.freq * 0.6);
         bar.mesh.scale.x = baseW * (1 + amp * 0.4);
 
-        // Opacity: modulated by amplitude and frequency
-        const opBase = (1 - bar.freq * 0.5);
+        const opBase = 1 - bar.freq * 0.5;
         bar.mat.uniforms.uOpacity.value = opBase * amp * 2.5;
       }
     }
 
     /* --- loop --- */
+
     _loop() {
       requestAnimationFrame(() => this._loop());
       const now = performance.now() / 1000;
