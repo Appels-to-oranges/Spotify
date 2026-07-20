@@ -3,26 +3,99 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Wavestation</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="description" content="Discover your listening habits. See your top artists, tracks, genres, trends, and more." />
-  <meta name="theme-color" content="#0a0a0a" />
+  <title>Wavestation — Internet Radio</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body class="landing">
-  <div class="landing-container">
-    <div class="logo-area">
-      <img src="/favicon.svg" alt="Wavestation" width="64" height="64" />
-      <h1>Wavestation</h1>
-      <p class="tagline">Discover your listening habits. Top artists, tracks, genres, trends, and more.</p>
-    </div>
-    <a href="/login" class="login-btn">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-      </svg>
-      Sign in with Spotify
-    </a>
-    <p class="landing-footnote">Connect your Spotify account to explore your music data</p>
+<body>
+  <div class="app">
+    <!-- ===== Now-Playing Bar (top, always visible when playing) ===== -->
+    <header class="now-playing-bar hidden" id="now-playing-bar">
+      <div class="np-left">
+        <img class="np-favicon" id="np-favicon" src="" alt="" />
+        <div class="np-info">
+          <span class="np-name" id="np-name"></span>
+          <span class="np-meta" id="np-meta"></span>
+        </div>
+      </div>
+      <div class="np-controls">
+        <button class="np-btn" id="np-stop-btn" title="Stop">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+      </div>
+      <div class="np-right">
+        <input type="range" class="volume-slider" id="np-volume" min="0" max="100" value="80" />
+        <button class="mute-btn" id="np-mute" title="Mute">
+          <svg id="mute-icon-on" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v7a4.49 4.49 0 002.5-3.5zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.5 8.5 0 0014 3.23z"/></svg>
+          <svg id="mute-icon-off" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12A4.5 4.5 0 0014 8.5v2.09l2.41 2.41c.06-.31.09-.65.09-1zm2.5 0a6.5 6.5 0 01-.78 3.11l1.46 1.46A8.44 8.44 0 0021 12a8.5 8.5 0 00-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.46 8.46 0 003.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4l-2.1 2.1L12 8.2V4z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===== Main Content ===== -->
+    <main class="main">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 25 Q15 10 25 25 Q35 40 45 25 Q55 10 65 25 Q75 40 85 25 Q90 18 95 25" stroke="url(#wave-grad)" stroke-width="4" stroke-linecap="round" fill="none"/>
+          <defs><linearGradient id="wave-grad" x1="0" y1="0" x2="100" y2="0"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#34d399"/></linearGradient></defs>
+        </svg>
+        <h1 class="brand-name">Wavestation</h1>
+        <p class="brand-tagline">Internet radio, zero friction</p>
+      </div>
+
+      <!-- Search -->
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Search stations..." autocomplete="off" />
+        <button id="search-btn" class="btn btn-primary">Search</button>
+      </div>
+
+      <!-- Genre quick-picks -->
+      <div class="genre-pills" id="genre-pills">
+        <button class="pill active" data-genre="">All</button>
+        <button class="pill" data-genre="pop">Pop</button>
+        <button class="pill" data-genre="rock">Rock</button>
+        <button class="pill" data-genre="jazz">Jazz</button>
+        <button class="pill" data-genre="classical">Classical</button>
+        <button class="pill" data-genre="electronic">Electronic</button>
+        <button class="pill" data-genre="hip hop">Hip Hop</button>
+        <button class="pill" data-genre="country">Country</button>
+        <button class="pill" data-genre="r&b">R&B</button>
+        <button class="pill" data-genre="latin">Latin</button>
+        <button class="pill" data-genre="metal">Metal</button>
+        <button class="pill" data-genre="lofi">Lo-Fi</button>
+        <button class="pill" data-genre="ambient">Ambient</button>
+        <button class="pill" data-genre="blues">Blues</button>
+        <button class="pill" data-genre="reggae">Reggae</button>
+        <button class="pill" data-genre="news">News</button>
+      </div>
+
+      <!-- Tabs: Results / Favorites -->
+      <div class="tab-bar">
+        <button class="tab active" data-tab="results">Stations</button>
+        <button class="tab" data-tab="favorites">Favorites</button>
+      </div>
+
+      <!-- Station lists -->
+      <div class="station-list" id="results-panel">
+        <div class="empty-state" id="results-empty">
+          <p>Search for a station or pick a genre above</p>
+        </div>
+        <div id="results-list"></div>
+      </div>
+
+      <div class="station-list hidden" id="favorites-panel">
+        <div class="empty-state" id="favorites-empty">
+          <p>No favorites yet — tap the star on any station</p>
+        </div>
+        <div id="favorites-list"></div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>Powered by <a href="https://www.radio-browser.info" target="_blank" rel="noopener">Radio Browser</a></span>
+    </footer>
   </div>
+
+  <script src="/app.js"></script>
 </body>
 </html>

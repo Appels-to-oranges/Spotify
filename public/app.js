@@ -1,559 +1,368 @@
 (() => {
-  const $ = (sel) => document.querySelector(sel);
-  let currentRange = "short_term";
+  "use strict";
 
-  async function api(path) {
-    const res = await fetch(path);
-    if (res.status === 401) {
-      window.location.href = "/";
-      return null;
-    }
-    if (res.status === 400) {
-      window.location.href = "/loading.html";
-      return null;
-    }
-    return res.json();
-  }
+  const RADIO_API = "https://de1.api.radio-browser.info/json/stations/search";
+  const FAV_KEY = "wavestation_favorites";
+  const VOL_KEY = "wavestation_volume";
+  const MUTE_KEY = "wavestation_mute";
 
-  function skeleton(count = 4) {
-    return Array.from({ length: count }, () => '<li class="skeleton"></li>').join("");
-  }
+  const audio = new Audio();
+  let currentStation = null;
+  let favorites = [];
 
-  // ---------- Renderers ----------
+  // DOM refs
+  const searchInput = document.getElementById("search-input");
+  const searchBtn = document.getElementById("search-btn");
+  const genrePills = document.getElementById("genre-pills");
+  const resultsList = document.getElementById("results-list");
+  const resultsEmpty = document.getElementById("results-empty");
+  const resultsPanel = document.getElementById("results-panel");
+  const favoritesPanel = document.getElementById("favorites-panel");
+  const favoritesList = document.getElementById("favorites-list");
+  const favoritesEmpty = document.getElementById("favorites-empty");
+  const tabs = document.querySelectorAll(".tab");
 
-  function renderListeningArtists(items) {
-    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No data</div></div></li>';
-    return items
-      .map(
-        (a, i) => `
-      <li class="stat-item">
-        <span class="stat-rank">${i + 1}</span>
-        <img class="stat-img round" src="${a.images?.[2]?.url || a.images?.[0]?.url || ""}" alt="${a.name}" />
-        <div class="stat-info">
-          <div class="stat-title">${a.name}</div>
-          <div class="stat-sub">${a.genres?.slice(0, 2).join(", ") || "—"}</div>
-        </div>
-      </li>`
-      )
-      .join("");
-  }
+  // Now playing
+  const npBar = document.getElementById("now-playing-bar");
+  const npFavicon = document.getElementById("np-favicon");
+  const npName = document.getElementById("np-name");
+  const npMeta = document.getElementById("np-meta");
+  const npStopBtn = document.getElementById("np-stop-btn");
+  const npVolume = document.getElementById("np-volume");
+  const npMute = document.getElementById("np-mute");
+  const muteIconOn = document.getElementById("mute-icon-on");
+  const muteIconOff = document.getElementById("mute-icon-off");
 
-  function renderListeningTracks(items) {
-    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No data</div></div></li>';
-    return items
-      .map(
-        (t, i) => `
-      <li class="stat-item">
-        <span class="stat-rank">${i + 1}</span>
-        <img class="stat-img" src="${t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || ""}" alt="${t.name}" />
-        <div class="stat-info">
-          <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists?.map((a) => a.name).join(", ")}</div>
-        </div>
-      </li>`
-      )
-      .join("");
-  }
-
-  function renderCuratedArtists(items) {
-    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No artists match filters</div></div></li>';
-    return items
-      .map(
-        (a, i) => `
-      <li class="stat-item">
-        <span class="stat-rank">${i + 1}</span>
-        ${a.image ? `<img class="stat-img round" src="${a.image}" alt="${a.name}" />` : '<div class="stat-img round" style="background:var(--surface-hover)"></div>'}
-        <div class="stat-info">
-          <div class="stat-title">${a.name}</div>
-          <div class="stat-sub">${a.genres.join(", ") || "—"} · ${a.trackCount} tracks · ${a.totalAppearances} appearances</div>
-        </div>
-      </li>`
-      )
-      .join("");
-  }
-
-  function formatDate(iso) {
-    if (!iso) return "";
-    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  }
-
-  function renderCuratedTracks(items) {
-    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No tracks match filters</div></div></li>';
-    return items
-      .map(
-        (t, i) => `
-      <li class="stat-item">
-        <span class="stat-rank">${i + 1}</span>
-        <img class="stat-img" src="${t.image}" alt="${t.name}" />
-        <div class="stat-info">
-          <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists} · in ${t.playlistCount} playlists${t.firstAdded ? ` · added ${formatDate(t.firstAdded)}` : ""}</div>
-        </div>
-      </li>`
-      )
-      .join("");
-  }
-
-  function renderBarChart(items, labelKey, countKey) {
-    if (!items.length) return '<li class="genre-item"><span class="genre-label">No data</span></li>';
-    const max = Math.max(...items.map((g) => g[countKey])) || 1;
-    return items
-      .map(
-        (g) => `
-      <li class="genre-item">
-        <span class="genre-label">${g[labelKey]}</span>
-        <div class="genre-bar-container">
-          <div class="genre-bar" style="width:${(g[countKey] / max) * 100}%"></div>
-        </div>
-        <span class="genre-count">${g[countKey]}</span>
-      </li>`
-      )
-      .join("");
-  }
-
-  function renderRecent(items) {
-    return items
-      .map((r) => {
-        const t = r.track;
-        const time = new Date(r.played_at).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        });
-        return `
-      <li class="stat-item">
-        <img class="stat-img" src="${t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || ""}" alt="${t.name}" />
-        <div class="stat-info">
-          <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists?.map((a) => a.name).join(", ")} · ${time}</div>
-        </div>
-      </li>`;
-      })
-      .join("");
-  }
-
-  function renderLibraryStats(data) {
-    const stats = [
-      [data.totalUniqueTracksScanned, "Tracks"],
-      [data.totalUniqueArtistsScanned, "Artists"],
-      [data.totalPlaylists, "Playlists"],
-      [data.savedTracks, "Saved"],
-      [data.savedAlbums, "Albums"],
-    ];
-    return stats.map(([n, l]) =>
-      `<div class="library-stat"><span class="library-stat-number">${n.toLocaleString()}</span><span class="library-stat-label">${l}</span></div>`
-    ).join("");
-  }
-
-  // ---------- Loaders ----------
-
-  async function loadProfile() {
-    const me = await api("/api/me");
-    if (!me) return;
-    const img = me.images?.[0]?.url;
-    $("#profile-info").innerHTML = `
-      ${img ? `<img class="profile-avatar" src="${img}" alt="avatar" />` : ""}
-      <span class="profile-name">${me.display_name}<small>${me.product === "premium" ? "Premium" : "Free"} · ${me.country || ""}</small></span>
-    `;
-  }
-
-  async function loadListeningHistory() {
-    ["listening-artists", "listening-tracks", "recently-played"].forEach((id) => {
-      document.getElementById(id).innerHTML = skeleton();
-    });
-
-    const [artists, tracks, recent] = await Promise.all([
-      api(`/api/top-artists?range=${currentRange}`),
-      api(`/api/top-tracks?range=${currentRange}`),
-      api("/api/recently-played"),
-    ]);
-
-    if (artists) $("#listening-artists").innerHTML = renderListeningArtists(artists.items || []);
-    if (tracks) $("#listening-tracks").innerHTML = renderListeningTracks(tracks.items || []);
-    if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
-  }
-
-  async function loadPlaylistAnalysis() {
-    const genre = $("#genre-filter").value;
-    const decade = $("#decade-filter").value;
-
-    ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown"].forEach((id) => {
-      document.getElementById(id).innerHTML = skeleton();
-    });
-
-    const params = new URLSearchParams();
-    if (genre) params.set("genre", genre);
-    if (decade) params.set("decade", decade);
-
-    const data = await api(`/api/dashboard?${params}`);
-    if (!data) return;
-
-    if (!genre && !decade) {
-      $("#library-stats").innerHTML = renderLibraryStats(data);
-    }
-
-    populateFilters(data.filterOptions, genre, decade);
-
-    $("#top-artists").innerHTML = renderCuratedArtists(data.topArtists || []);
-    $("#top-tracks").innerHTML = renderCuratedTracks(data.topTracks || []);
-    $("#genre-breakdown").innerHTML = renderBarChart(data.genres || [], "genre", "count");
-    $("#decade-breakdown").innerHTML = renderBarChart(data.decades || [], "decade", "count");
-
-    $("#filter-clear").style.display = genre || decade ? "" : "none";
-  }
-
-  function populateFilters(options, currentGenre, currentDecade) {
-    const genreSelect = $("#genre-filter");
-    const decadeSelect = $("#decade-filter");
-
-    genreSelect.innerHTML = '<option value="">All genres</option>' +
-      options.genres.map((g) => `<option value="${g}"${g === currentGenre ? " selected" : ""}>${g}</option>`).join("");
-
-    decadeSelect.innerHTML = '<option value="">All decades</option>' +
-      options.decades.map((d) => `<option value="${d}"${d === currentDecade ? " selected" : ""}>${d}</option>`).join("");
-  }
-
-  // ---------- Chart helpers ----------
-
-  const CHART_COLORS = [
-    "#1db954", "#818cf8", "#f472b6", "#fb923c", "#22d3ee",
-    "#facc15", "#c084fc", "#34d399", "#f87171", "#38bdf8",
-  ];
-
-  const chartDefaults = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: { color: "#888", boxWidth: 12, padding: 12, font: { size: 11 } },
-      },
-      tooltip: {
-        backgroundColor: "#1e1e1e",
-        titleColor: "#e4e4e4",
-        bodyColor: "#e4e4e4",
-        borderColor: "#2a2a2a",
-        borderWidth: 1,
-      },
-    },
-    scales: {
-      x: {
-        ticks: { color: "#888", font: { size: 10 }, maxTicksLimit: 12 },
-        grid: { color: "rgba(255,255,255,0.05)" },
-      },
-      y: {
-        ticks: { color: "#888", font: { size: 10 } },
-        grid: { color: "rgba(255,255,255,0.05)" },
-        beginAtZero: true,
-      },
-    },
-  };
-
-  let genreChart = null;
-  let decadeChart = null;
-  let artistChart = null;
-  let cachedTrendsData = null;
-
-  function formatMonth(m) {
-    const [y, mo] = m.split("-");
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    return `${months[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
-  }
-
-  function makeLineDatasets(series) {
-    return series.map((s, i) => ({
-      label: s.label,
-      data: s.data,
-      borderColor: CHART_COLORS[i % CHART_COLORS.length],
-      backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
-      borderWidth: 2,
-      tension: 0.3,
-      fill: false,
-      pointRadius: 0,
-      pointHitRadius: 8,
-    }));
-  }
-
-  let selectedGenres = [];
-  let selectedDecades = [];
-  let allGenreOptions = [];
-  let allDecadeOptions = [];
-
-  function initChipPicker(wrapperId, chipBarId, options, selected, onUpdate) {
-    const wrapper = document.getElementById(wrapperId);
-    const input = wrapper.querySelector(".searchable-input");
-    const dropdown = wrapper.querySelector(".searchable-dropdown");
-
-    function renderDropdown(filter) {
-      const q = (filter || "").toLowerCase();
-      const filtered = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
-      dropdown.innerHTML = filtered.map((o) => {
-        const active = selected.includes(o.name);
-        return `<div class="searchable-option${active ? " active" : ""}" data-value="${o.name}">${active ? "✓ " : ""}${o.name}<span class="genre-count-badge">${o.count}</span></div>`;
-      }).join("") || '<div class="searchable-option" style="pointer-events:none;color:#555">No matches</div>';
-    }
-
-    function renderChips() {
-      document.getElementById(chipBarId).innerHTML = selected.map((name) =>
-        `<span class="chip">${name}<span class="chip-remove" data-value="${name}">×</span></span>`
-      ).join("");
-    }
-
-    input.addEventListener("focus", () => { renderDropdown(input.value); dropdown.classList.add("open"); });
-    input.addEventListener("input", () => { renderDropdown(input.value); dropdown.classList.add("open"); });
-
-    dropdown.addEventListener("click", (e) => {
-      const opt = e.target.closest(".searchable-option");
-      if (!opt || !opt.dataset.value) return;
-      const val = opt.dataset.value;
-      const idx = selected.indexOf(val);
-      if (idx >= 0) selected.splice(idx, 1);
-      else selected.push(val);
-      input.value = "";
-      renderDropdown("");
-      renderChips();
-      onUpdate();
-    });
-
-    document.getElementById(chipBarId).addEventListener("click", (e) => {
-      const rm = e.target.closest(".chip-remove");
-      if (!rm) return;
-      const idx = selected.indexOf(rm.dataset.value);
-      if (idx >= 0) selected.splice(idx, 1);
-      renderChips();
-      onUpdate();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!wrapper.contains(e.target)) dropdown.classList.remove("open");
-    });
-
-    renderChips();
-  }
-
-  async function loadTrends() {
-    const data = await api("/api/trends");
-    if (!data) return;
-    cachedTrendsData = data;
-
-    allGenreOptions = data.filterOptions.genres;
-    allDecadeOptions = data.filterOptions.decades.map((d) => ({ name: d, count: "" }));
-
-    selectedGenres = (data.genreSeries || []).map((s) => s.label);
-    selectedDecades = (data.decadeSeries || []).map((s) => s.label);
-
-    renderGenreChart(data);
-    renderDecadeChart(data);
-
-    initChipPicker("genre-chart-picker", "genre-chips", allGenreOptions, selectedGenres, reloadGenreChart);
-    initChipPicker("decade-chart-picker", "decade-chips", allDecadeOptions, selectedDecades, reloadDecadeChart);
-
-    populateArtistPicker(data.artistList);
-
-    if (data.artistList?.length) {
-      const topArtist = data.artistList[0];
-      $("#artist-picker-select").value = topArtist.id;
-      loadArtistTimeline(topArtist.id);
+  /* ---------- Favorites ---------- */
+  function loadFavorites() {
+    try {
+      favorites = JSON.parse(localStorage.getItem(FAV_KEY)) || [];
+    } catch {
+      favorites = [];
     }
   }
 
-  function renderGenreChart(data) {
-    if (genreChart) genreChart.destroy();
-    const labels = (data.genreMonths || []).map(formatMonth);
-    genreChart = new Chart(document.getElementById("genre-trends-chart"), {
-      type: "line",
-      data: { labels, datasets: makeLineDatasets(data.genreSeries || []) },
-      options: chartDefaults,
-    });
+  function saveFavorites() {
+    localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
   }
 
-  function renderDecadeChart(data) {
-    if (decadeChart) decadeChart.destroy();
-    const labels = (data.decadeMonths || []).map(formatMonth);
-    decadeChart = new Chart(document.getElementById("decade-trends-chart"), {
-      type: "line",
-      data: { labels, datasets: makeLineDatasets(data.decadeSeries || []) },
-      options: chartDefaults,
-    });
+  function isFav(url) {
+    return favorites.some((f) => f.url === url);
   }
 
-  function populateArtistPicker(artistList) {
-    const picker = $("#artist-picker-select");
-    const current = picker.value;
-    picker.innerHTML = '<option value="">Select an artist…</option>' +
-      artistList.map((a) =>
-        `<option value="${a.id}"${a.id === current ? " selected" : ""}>${a.name} (${a.trackCount} tracks)</option>`
-      ).join("");
-  }
-
-  async function reloadGenreChart() {
-    const params = new URLSearchParams();
-    if (selectedGenres.length) params.set("genres", selectedGenres.join(","));
-    const data = await api(`/api/trends?${params}`);
-    if (!data) return;
-    renderGenreChart(data);
-  }
-
-  async function reloadDecadeChart() {
-    const params = new URLSearchParams();
-    if (selectedDecades.length) params.set("decades", selectedDecades.join(","));
-    const data = await api(`/api/trends?${params}`);
-    if (!data) return;
-    renderDecadeChart(data);
-  }
-
-  async function loadArtistTimeline(artistId) {
-    const emptyMsg = $("#artist-timeline-empty");
-    if (!artistId) {
-      if (artistChart) { artistChart.destroy(); artistChart = null; }
-      emptyMsg.style.display = "";
-      return;
-    }
-
-    const data = await api(`/api/trends?artist=${artistId}`);
-    if (!data || !data.artistTimeline) return;
-
-    emptyMsg.style.display = "none";
-    const labels = (data.artistMonths || []).map(formatMonth);
-
-    if (artistChart) artistChart.destroy();
-    artistChart = new Chart(document.getElementById("artist-timeline-chart"), {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: `${data.artistName} — tracks added`,
-          data: data.artistTimeline,
-          backgroundColor: "#1db954" + "80",
-          borderColor: "#1db954",
-          borderWidth: 1,
-          borderRadius: 3,
-        }],
-      },
-      options: {
-        ...chartDefaults,
-        plugins: {
-          ...chartDefaults.plugins,
-          legend: { display: false },
-        },
-      },
-    });
-  }
-
-  // ---------- Momentum ----------
-
-  let momentumData = null;
-  let currentMomentumPeriod = "1 year";
-  let currentMomentumCat = "genres";
-
-  function renderMomentumList(items, direction) {
-    if (!items || !items.length) {
-      return `<div class="momentum-empty">Nothing ${direction === "up" ? "trending up" : "cooling down"} in this period</div>`;
-    }
-    return items.map((m) => {
-      const arrow = m.change > 0 ? "↑" : "↓";
-      const cls = m.change > 0 ? "momentum-up" : "momentum-down";
-      const pct = m.change > 0 ? `+${m.change}%` : `${m.change}%`;
-      const expected = Math.round(m.expectedCount);
-      return `<div class="momentum-item">
-        <span class="momentum-arrow ${cls}">${arrow}</span>
-        <span class="momentum-genre">${m.name}</span>
-        <span class="momentum-detail">${m.windowCount} added · avg ${expected}</span>
-        <span class="momentum-pct ${cls}">${pct}</span>
-      </div>`;
-    }).join("");
-  }
-
-  function renderMomentum() {
-    if (!momentumData?.periods) return;
-    const periodData = momentumData.periods[currentMomentumPeriod];
-    if (!periodData) return;
-
-    const all = periodData[currentMomentumCat] || [];
-    const sortBy = document.getElementById("momentum-sort").value;
-    let sorted;
-    if (sortBy === "total") {
-      sorted = [...all].sort((a, b) => b.totalCount - a.totalCount);
+  function toggleFav(station) {
+    const idx = favorites.findIndex((f) => f.url === station.url);
+    if (idx >= 0) {
+      favorites.splice(idx, 1);
     } else {
-      sorted = [...all].sort((a, b) => b.change - a.change);
+      favorites.push({
+        name: station.name,
+        url: station.url,
+        favicon: station.favicon || "",
+        country: station.country || "",
+        tags: station.tags || "",
+      });
+    }
+    saveFavorites();
+    renderFavorites();
+    refreshFavButtons();
+  }
+
+  function refreshFavButtons() {
+    document.querySelectorAll(".fav-btn").forEach((btn) => {
+      const url = btn.dataset.url;
+      if (!url) return;
+      const fav = isFav(url);
+      btn.classList.toggle("is-fav", fav);
+      btn.innerHTML = fav ? "&#9733;" : "&#9734;";
+    });
+  }
+
+  /* ---------- Volume ---------- */
+  function initVolume() {
+    const saved = parseInt(localStorage.getItem(VOL_KEY), 10);
+    const vol = isNaN(saved) ? 80 : Math.max(0, Math.min(100, saved));
+    const muted = localStorage.getItem(MUTE_KEY) === "1";
+
+    npVolume.value = vol;
+    audio.volume = muted ? 0 : vol / 100;
+    updateMuteIcon(muted);
+
+    npVolume.addEventListener("input", () => {
+      const v = parseInt(npVolume.value, 10);
+      audio.volume = isMuted() ? 0 : v / 100;
+      localStorage.setItem(VOL_KEY, v);
+    });
+
+    npMute.addEventListener("click", () => {
+      const next = !isMuted();
+      localStorage.setItem(MUTE_KEY, next ? "1" : "");
+      audio.volume = next ? 0 : parseInt(npVolume.value, 10) / 100;
+      updateMuteIcon(next);
+    });
+  }
+
+  function isMuted() {
+    return localStorage.getItem(MUTE_KEY) === "1";
+  }
+
+  function updateMuteIcon(muted) {
+    muteIconOn.classList.toggle("hidden", muted);
+    muteIconOff.classList.toggle("hidden", !muted);
+  }
+
+  /* ---------- Playback ---------- */
+  function playStation(station) {
+    if (!station?.url) return;
+    currentStation = station;
+    audio.src = station.url;
+    audio.play().catch(() => {});
+
+    npName.textContent = station.name || "Unknown Station";
+    npMeta.textContent = [station.country, station.tags]
+      .filter(Boolean)
+      .join(" · ");
+
+    if (station.favicon) {
+      npFavicon.src = station.favicon;
+      npFavicon.style.display = "";
+      npFavicon.onerror = () => {
+        npFavicon.style.display = "none";
+      };
+    } else {
+      npFavicon.style.display = "none";
     }
 
-    const trending = sorted.filter((m) => m.change > 0).slice(0, 10);
-    const cooling = sorted.filter((m) => m.change < 0).slice(0, 10);
-
-    document.getElementById("momentum-trending").innerHTML = renderMomentumList(trending, "up");
-    document.getElementById("momentum-cooling").innerHTML = renderMomentumList(cooling, "down");
+    npBar.classList.remove("hidden");
+    highlightPlaying();
   }
 
-  async function loadMomentum() {
-    document.getElementById("momentum-trending").innerHTML = skeleton(3);
-    document.getElementById("momentum-cooling").innerHTML = skeleton(3);
-    const data = await api("/api/momentum");
-    if (!data) return;
-    momentumData = data;
-    renderMomentum();
+  function stopStation() {
+    audio.pause();
+    audio.src = "";
+    currentStation = null;
+    npBar.classList.add("hidden");
+    highlightPlaying();
   }
 
-  // ---------- Event listeners ----------
-
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentRange = btn.dataset.range;
-      loadListeningHistory();
+  function highlightPlaying() {
+    document.querySelectorAll(".station-card").forEach((card) => {
+      const url = card.dataset.url;
+      card.classList.toggle("playing", currentStation && url === currentStation.url);
     });
-  });
+  }
 
-  document.querySelectorAll(".momentum-cat").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".momentum-cat").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentMomentumCat = btn.dataset.cat;
-      renderMomentum();
+  npStopBtn.addEventListener("click", stopStation);
+
+  /* ---------- Search / Browse ---------- */
+  let abortCtrl = null;
+
+  function searchStations(query, tag) {
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
+
+    resultsList.innerHTML = "";
+    resultsEmpty.innerHTML = "";
+    resultsList.innerHTML =
+      '<div class="loading"><div class="spinner"></div>Searching...</div>';
+
+    const params = new URLSearchParams({
+      limit: "30",
+      order: "votes",
+      reverse: "true",
+      hidebroken: "true",
     });
-  });
+    if (query) params.set("name", query);
+    if (tag) params.set("tag", tag);
 
-  document.querySelectorAll(".momentum-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".momentum-tab").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentMomentumPeriod = btn.dataset.period;
-      renderMomentum();
-    });
-  });
+    const timeout = setTimeout(() => abortCtrl.abort(), 10000);
 
-  $("#momentum-sort").addEventListener("change", renderMomentum);
+    fetch(`${RADIO_API}?${params}`, { signal: abortCtrl.signal })
+      .then((r) => r.json())
+      .then((stations) => {
+        clearTimeout(timeout);
+        const secure = (stations || []).filter((st) => {
+          const u = st.url_resolved || st.url;
+          return u && u.startsWith("https");
+        });
+        renderResults(secure);
+      })
+      .catch((err) => {
+        clearTimeout(timeout);
+        if (err.name === "AbortError") return;
+        resultsList.innerHTML = "";
+        resultsEmpty.innerHTML = "<p>Search failed — try again</p>";
+        resultsEmpty.style.display = "";
+      });
+  }
 
-  $("#genre-filter").addEventListener("change", loadPlaylistAnalysis);
-  $("#decade-filter").addEventListener("change", loadPlaylistAnalysis);
-  $("#filter-clear").addEventListener("click", () => {
-    $("#genre-filter").value = "";
-    $("#decade-filter").value = "";
-    $("#filter-clear").style.display = "none";
-    loadPlaylistAnalysis();
-  });
-
-  $("#artist-picker-select").addEventListener("change", (e) => {
-    loadArtistTimeline(e.target.value);
-  });
-
-  // ---------- Init ----------
-
-  async function init() {
-    const status = await api("/api/scan-status");
-    if (!status?.scanned) {
-      window.location.href = "/loading.html";
+  function renderResults(stations) {
+    resultsList.innerHTML = "";
+    if (!stations.length) {
+      resultsEmpty.innerHTML = "<p>No stations found</p>";
+      resultsEmpty.style.display = "";
       return;
     }
-
-    loadProfile();
-    loadListeningHistory();
-    loadPlaylistAnalysis();
-    loadMomentum();
-    loadTrends();
+    resultsEmpty.style.display = "none";
+    stations.forEach((st) => {
+      const url = st.url_resolved || st.url;
+      const card = makeStationCard({
+        name: st.name,
+        url,
+        favicon: st.favicon || "",
+        country: st.country || "",
+        tags: st.tags || "",
+      });
+      resultsList.appendChild(card);
+    });
+    highlightPlaying();
   }
 
-  init();
+  /* ---------- Station Card ---------- */
+  function makeStationCard(station) {
+    const card = document.createElement("div");
+    card.className = "station-card";
+    card.dataset.url = station.url;
+
+    if (station.favicon) {
+      const img = document.createElement("img");
+      img.className = "station-icon";
+      img.src = station.favicon;
+      img.alt = "";
+      img.loading = "lazy";
+      img.onerror = () => {
+        const ph = document.createElement("div");
+        ph.className = "station-icon-placeholder";
+        ph.innerHTML = "&#x1F4FB;";
+        img.replaceWith(ph);
+      };
+      card.appendChild(img);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "station-icon-placeholder";
+      ph.innerHTML = "&#x1F4FB;";
+      card.appendChild(ph);
+    }
+
+    const info = document.createElement("div");
+    info.className = "station-info";
+
+    const name = document.createElement("div");
+    name.className = "station-name";
+    name.textContent = station.name;
+
+    const meta = document.createElement("div");
+    meta.className = "station-meta";
+    meta.textContent = [station.country, station.tags]
+      .filter(Boolean)
+      .join(" · ");
+
+    info.appendChild(name);
+    info.appendChild(meta);
+    card.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "station-actions";
+
+    // EQ playing indicator
+    const eq = document.createElement("div");
+    eq.className = "play-indicator";
+    eq.innerHTML =
+      '<div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>';
+    actions.appendChild(eq);
+
+    // Fav button
+    const fav = document.createElement("button");
+    fav.type = "button";
+    fav.className = "fav-btn" + (isFav(station.url) ? " is-fav" : "");
+    fav.dataset.url = station.url;
+    fav.innerHTML = isFav(station.url) ? "&#9733;" : "&#9734;";
+    fav.title = "Favorite";
+    fav.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleFav(station);
+    });
+    actions.appendChild(fav);
+
+    card.appendChild(actions);
+
+    card.addEventListener("click", () => playStation(station));
+
+    return card;
+  }
+
+  /* ---------- Favorites rendering ---------- */
+  function renderFavorites() {
+    favoritesList.innerHTML = "";
+    if (!favorites.length) {
+      favoritesEmpty.style.display = "";
+      return;
+    }
+    favoritesEmpty.style.display = "none";
+    favorites.forEach((st) => {
+      const card = makeStationCard(st);
+      favoritesList.appendChild(card);
+    });
+    highlightPlaying();
+  }
+
+  /* ---------- Tabs ---------- */
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      const which = tab.dataset.tab;
+      resultsPanel.classList.toggle("hidden", which !== "results");
+      favoritesPanel.classList.toggle("hidden", which !== "favorites");
+    });
+  });
+
+  /* ---------- Genre pills ---------- */
+  genrePills.addEventListener("click", (e) => {
+    const pill = e.target.closest(".pill");
+    if (!pill) return;
+    genrePills.querySelectorAll(".pill").forEach((p) => p.classList.remove("active"));
+    pill.classList.add("active");
+
+    // Switch to Stations tab
+    tabs.forEach((t) => t.classList.remove("active"));
+    document.querySelector('[data-tab="results"]').classList.add("active");
+    resultsPanel.classList.remove("hidden");
+    favoritesPanel.classList.add("hidden");
+
+    const genre = pill.dataset.genre;
+    if (genre) {
+      searchInput.value = "";
+      searchStations("", genre);
+    } else {
+      resultsList.innerHTML = "";
+      resultsEmpty.innerHTML = "<p>Search for a station or pick a genre above</p>";
+      resultsEmpty.style.display = "";
+    }
+  });
+
+  /* ---------- Search submit ---------- */
+  function doSearch() {
+    const q = searchInput.value.trim();
+    if (!q) return;
+    genrePills.querySelectorAll(".pill").forEach((p) => p.classList.remove("active"));
+
+    // Switch to Stations tab
+    tabs.forEach((t) => t.classList.remove("active"));
+    document.querySelector('[data-tab="results"]').classList.add("active");
+    resultsPanel.classList.remove("hidden");
+    favoritesPanel.classList.add("hidden");
+
+    searchStations(q, "");
+  }
+
+  searchBtn.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSearch();
+  });
+
+  /* ---------- Init ---------- */
+  loadFavorites();
+  renderFavorites();
+  initVolume();
 })();
