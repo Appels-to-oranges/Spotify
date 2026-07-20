@@ -117,7 +117,7 @@
     if (!station?.url) return;
     currentStation = station;
     audio.src = station.url;
-    audio.play().catch(() => {});
+    audio.play().catch((e) => console.warn("Playback failed:", e));
 
     npName.textContent = station.name || "Unknown Station";
     npMeta.textContent = [station.country, station.tags]

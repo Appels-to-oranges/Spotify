@@ -3,16 +3,15 @@
 
   if (typeof THREE === "undefined") return;
 
-  const BOKEH_COUNT = 22;
-  const PARTICLE_COUNT = 70;
-  const SMOOTH = 0.12;
-  const AMBIENT_SMOOTH = 0.04;
+  const BOKEH_COUNT = 24;
+  const PARTICLE_COUNT = 80;
+  const SMOOTH = 0.14;
+  const AMBIENT_SMOOTH = 0.06;
 
   const PALETTE = [
     0xd4622b, 0xe8a951, 0xc73e3a, 0xe07a5f, 0xf4a261, 0x81b29a, 0xf5e6cc,
   ];
 
-  // Bauhaus warm palette as THREE.Color objects for bokeh
   const BOKEH_COLORS = PALETTE.map((c) => new THREE.Color(c));
 
   /* ========== Shaders ========== */
@@ -31,7 +30,7 @@
     void main() {
       float d = length(vUv - 0.5) * 2.0;
       float a = 1.0 - smoothstep(0.0, 1.0, d);
-      a = pow(a, 2.8);
+      a = pow(a, 2.2);
       gl_FragColor = vec4(uColor, a * uAlpha);
     }`;
 
@@ -41,9 +40,12 @@
     const c = document.createElement("canvas");
     c.width = c.height = sz || 64;
     const ctx = c.getContext("2d");
-    const g = ctx.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+    const g = ctx.createRadialGradient(
+      sz / 2, sz / 2, 0,
+      sz / 2, sz / 2, sz / 2
+    );
     g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.25, "rgba(255,255,255,0.5)");
+    g.addColorStop(0.2, "rgba(255,255,255,0.6)");
     g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, sz, sz);
@@ -73,11 +75,13 @@
 
       this.audioCtx = null;
       this.analyser = null;
+      this.sourceNode = null;
       this.rawData = null;
       this.smoothed = new Float32Array(128);
       this.connected = false;
       this.hasRealData = false;
       this.zeroFrames = 0;
+      this.isPlaying = false;
 
       this.time = 0;
       this.lastTime = performance.now() / 1000;
@@ -98,7 +102,6 @@
       this._loop();
     }
 
-    /* ----- resize ----- */
     _resize() {
       const p = this.canvas.parentElement;
       const w = p.clientWidth;
@@ -117,11 +120,11 @@
       if (this.connected) return;
       try {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = this.audioCtx.createMediaElementSource(el);
+        this.sourceNode = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = 256;
-        this.analyser.smoothingTimeConstant = 0.82;
-        src.connect(this.analyser);
+        this.analyser.smoothingTimeConstant = 0.8;
+        this.sourceNode.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
         this.connected = true;
@@ -131,17 +134,18 @@
     }
 
     resumeCtx() {
-      if (this.audioCtx && this.audioCtx.state === "suspended")
+      if (this.audioCtx && this.audioCtx.state === "suspended") {
         this.audioCtx.resume();
+      }
     }
 
     /* ----- frequency data ----- */
     _freq() {
-      if (this.connected && this.analyser) {
+      if (this.connected && this.analyser && this.isPlaying) {
         this.analyser.getByteFrequencyData(this.rawData);
         let sum = 0;
         for (let i = 0; i < this.rawData.length; i++) sum += this.rawData[i];
-        if (sum > 100) {
+        if (sum > 200) {
           this.hasRealData = true;
           this.zeroFrames = 0;
           for (let i = 0; i < 128; i++) {
@@ -154,18 +158,21 @@
         if (this.zeroFrames > 60) this.hasRealData = false;
       }
 
-      // Ambient fallback — organic evolving pattern
+      // Ambient fallback — always runs, stronger when playing
       const t = this.time;
+      const boost = this.isPlaying ? 1.8 : 1.0;
       for (let i = 0; i < 128; i++) {
         const f = i / 128;
-        const fall = Math.pow(1 - f, 1.6);
+        const fall = Math.pow(1 - f, 1.4);
         const v =
-          (0.22 +
-            Math.sin(t * 0.35 + f * 5) * 0.12 +
-            Math.sin(t * 0.6 + f * 9 + 1.4) * 0.09 +
-            Math.sin(t * 0.25 + f * 3 - 0.8) * 0.07 +
-            Math.cos(t * 0.9) * 0.05 * (1 - f)) *
-          fall;
+          (0.35 +
+            Math.sin(t * 0.5 + f * 4.5) * 0.2 +
+            Math.sin(t * 0.8 + f * 9 + 1.4) * 0.15 +
+            Math.sin(t * 0.3 + f * 2.5 - 0.8) * 0.12 +
+            Math.cos(t * 1.2) * 0.1 * (1 - f) +
+            Math.sin(t * 0.15 + f * 1.5) * 0.08) *
+          fall *
+          boost;
         const target = Math.max(0, Math.min(1, v));
         this.smoothed[i] += (target - this.smoothed[i]) * AMBIENT_SMOOTH;
       }
@@ -183,7 +190,7 @@
       const geo = new THREE.PlaneGeometry(1, 1);
       for (let i = 0; i < BOKEH_COUNT; i++) {
         const col = BOKEH_COLORS[i % BOKEH_COLORS.length].clone();
-        const baseAlpha = rand(0.025, 0.08);
+        const baseAlpha = rand(0.06, 0.16);
         const mat = new THREE.ShaderMaterial({
           uniforms: {
             uColor: { value: col },
@@ -196,19 +203,19 @@
         });
 
         const mesh = new THREE.Mesh(geo, mat);
-        const sz = rand(0.2, 0.65);
+        const sz = rand(0.3, 0.85);
         mesh.scale.set(sz, sz, 1);
 
         const d = {
           mesh,
-          baseX: rand(-1.4, 1.4),
-          baseY: rand(-0.9, 0.9),
+          baseX: rand(-1.6, 1.6),
+          baseY: rand(-0.95, 0.95),
           sz,
           baseAlpha,
           phase: rand(0, Math.PI * 2),
-          sX: rand(-0.12, 0.12),
-          sY: rand(-0.1, 0.1),
-          drift: rand(0.04, 0.18),
+          sX: rand(0.3, 0.8) * (Math.random() < 0.5 ? -1 : 1),
+          sY: rand(0.2, 0.6) * (Math.random() < 0.5 ? -1 : 1),
+          drift: rand(0.08, 0.3),
         };
         mesh.position.set(d.baseX, d.baseY, 0);
         this.scene.add(mesh);
@@ -218,12 +225,12 @@
 
     _buildRings() {
       const defs = [
-        { r: 0.1, th: 0.0025, arc: Math.PI * 2, spd: 0.12 },
-        { r: 0.19, th: 0.003, arc: Math.PI * 1.5, spd: -0.09 },
-        { r: 0.29, th: 0.0025, arc: Math.PI * 1.7, spd: 0.07 },
-        { r: 0.4, th: 0.004, arc: Math.PI * 1.3, spd: -0.1 },
-        { r: 0.52, th: 0.003, arc: Math.PI * 1.8, spd: 0.055 },
-        { r: 0.64, th: 0.0035, arc: Math.PI * 1.5, spd: -0.04 },
+        { r: 0.1, th: 0.004, arc: Math.PI * 2, spd: 0.2 },
+        { r: 0.2, th: 0.005, arc: Math.PI * 1.5, spd: -0.15 },
+        { r: 0.31, th: 0.004, arc: Math.PI * 1.7, spd: 0.12 },
+        { r: 0.43, th: 0.006, arc: Math.PI * 1.3, spd: -0.18 },
+        { r: 0.56, th: 0.005, arc: Math.PI * 1.8, spd: 0.1 },
+        { r: 0.7, th: 0.005, arc: Math.PI * 1.5, spd: -0.08 },
       ];
       const bands = [
         [0, 5],
@@ -239,7 +246,7 @@
         const mat = new THREE.MeshBasicMaterial({
           color: PALETTE[i % PALETTE.length],
           transparent: true,
-          opacity: 0.04,
+          opacity: 0.08,
           side: THREE.DoubleSide,
           depthWrite: false,
         });
@@ -263,7 +270,7 @@
       const mat = new THREE.ShaderMaterial({
         uniforms: {
           uColor: { value: new THREE.Color(0xf5e6cc) },
-          uAlpha: { value: 0.06 },
+          uAlpha: { value: 0.1 },
         },
         vertexShader: bokehVert,
         fragmentShader: bokehFrag,
@@ -271,7 +278,7 @@
         depthWrite: false,
       });
       this.centerOrb = new THREE.Mesh(geo, mat);
-      this.centerOrb.scale.set(0.14, 0.14, 1);
+      this.centerOrb.scale.set(0.18, 0.18, 1);
       this.centerOrb.position.z = 0.05;
       this.scene.add(this.centerOrb);
     }
@@ -281,19 +288,19 @@
       this.pData = [];
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         const a = rand(0, Math.PI * 2);
-        const dist = rand(0.02, 0.7);
+        const dist = rand(0.02, 0.8);
         pos[i * 3] = Math.cos(a) * dist;
         pos[i * 3 + 1] = Math.sin(a) * dist;
         pos[i * 3 + 2] = 0.15;
-        this.pData.push({ a, dist, spd: rand(0.015, 0.05) });
+        this.pData.push({ a, dist, spd: rand(0.02, 0.06) });
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       const mat = new THREE.PointsMaterial({
-        size: 2.5,
+        size: 3,
         color: 0xf5e6cc,
         transparent: true,
-        opacity: 0.25,
+        opacity: 0.35,
         map: circleTexture(64),
         blending: THREE.AdditiveBlending,
         depthWrite: false,
@@ -310,12 +317,12 @@
       const en = this._band(0, 64);
       this.bokeh.forEach((b) => {
         b.mesh.position.x =
-          b.baseX + Math.sin(this.time * b.sX * 2 + b.phase) * b.drift;
+          b.baseX + Math.sin(this.time * b.sX + b.phase) * b.drift;
         b.mesh.position.y =
-          b.baseY + Math.cos(this.time * b.sY * 2 + b.phase * 1.3) * b.drift;
-        const s = b.sz * (1 + bass * 0.35);
+          b.baseY + Math.cos(this.time * b.sY + b.phase * 1.3) * b.drift;
+        const s = b.sz * (1 + bass * 0.5);
         b.mesh.scale.set(s, s, 1);
-        b.mesh.material.uniforms.uAlpha.value = b.baseAlpha + en * 0.06;
+        b.mesh.material.uniforms.uAlpha.value = b.baseAlpha + en * 0.12;
       });
     }
 
@@ -323,17 +330,17 @@
       this.rings.forEach((r) => {
         const en = this._band(r.lo, r.hi);
         r.mesh.rotation.z += r.spd * dt;
-        const sc = 1 + en * 0.25;
+        const sc = 1 + en * 0.35;
         r.mesh.scale.set(sc, sc, 1);
-        r.mat.opacity = 0.04 + en * 0.55;
+        r.mat.opacity = 0.06 + en * 0.7;
       });
     }
 
     _updOrb() {
       const en = this._band(0, 50);
-      const s = 0.12 + en * 0.22;
+      const s = 0.15 + en * 0.35;
       this.centerOrb.scale.set(s, s, 1);
-      this.centerOrb.material.uniforms.uAlpha.value = 0.05 + en * 0.18;
+      this.centerOrb.material.uniforms.uAlpha.value = 0.08 + en * 0.25;
     }
 
     _updParticles(dt) {
@@ -341,16 +348,16 @@
       const en = this._band(0, 128);
       const arr = this.particles.geometry.attributes.position.array;
       this.pData.forEach((p, i) => {
-        p.dist += p.spd * (0.3 + treble * 2.5) * dt;
-        if (p.dist > 1.3) {
-          p.dist = rand(0.01, 0.04);
+        p.dist += p.spd * (0.4 + treble * 3.0) * dt;
+        if (p.dist > 1.4) {
+          p.dist = rand(0.01, 0.05);
           p.a = rand(0, Math.PI * 2);
         }
         arr[i * 3] = Math.cos(p.a) * p.dist;
         arr[i * 3 + 1] = Math.sin(p.a) * p.dist;
       });
       this.particles.geometry.attributes.position.needsUpdate = true;
-      this.particles.material.opacity = 0.12 + en * 0.5;
+      this.particles.material.opacity = 0.2 + en * 0.6;
     }
 
     /* ----- render loop ----- */
@@ -387,9 +394,14 @@
     const connect = () => {
       viz.connectAudio(audio);
       viz.resumeCtx();
+      viz.isPlaying = true;
     };
 
     audio.addEventListener("play", connect);
+    audio.addEventListener("pause", () => {
+      viz.isPlaying = false;
+    });
+
     if (!audio.paused) connect();
   }
   hookAudio();
