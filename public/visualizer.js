@@ -73,14 +73,7 @@
       this.renderer.setClearColor(0x0a0a0f, 1);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-      this.audioCtx = null;
-      this.analyser = null;
-      this.sourceNode = null;
-      this.rawData = null;
       this.smoothed = new Float32Array(128);
-      this.connected = false;
-      this.hasRealData = false;
-      this.zeroFrames = 0;
       this.isPlaying = false;
 
       this.time = 0;
@@ -115,50 +108,8 @@
       this.camera.updateProjectionMatrix();
     }
 
-    /* ----- audio connection ----- */
-    connectAudio(el) {
-      if (this.connected) return;
-      try {
-        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        this.sourceNode = this.audioCtx.createMediaElementSource(el);
-        this.analyser = this.audioCtx.createAnalyser();
-        this.analyser.fftSize = 256;
-        this.analyser.smoothingTimeConstant = 0.8;
-        this.sourceNode.connect(this.analyser);
-        this.analyser.connect(this.audioCtx.destination);
-        this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
-        this.connected = true;
-      } catch (e) {
-        console.warn("Visualizer: audio connect failed", e);
-      }
-    }
-
-    resumeCtx() {
-      if (this.audioCtx && this.audioCtx.state === "suspended") {
-        this.audioCtx.resume();
-      }
-    }
-
-    /* ----- frequency data ----- */
+    /* ----- frequency data (ambient, no Web Audio routing) ----- */
     _freq() {
-      if (this.connected && this.analyser && this.isPlaying) {
-        this.analyser.getByteFrequencyData(this.rawData);
-        let sum = 0;
-        for (let i = 0; i < this.rawData.length; i++) sum += this.rawData[i];
-        if (sum > 200) {
-          this.hasRealData = true;
-          this.zeroFrames = 0;
-          for (let i = 0; i < 128; i++) {
-            const r = this.rawData[i] / 255;
-            this.smoothed[i] += (r - this.smoothed[i]) * SMOOTH;
-          }
-          return;
-        }
-        this.zeroFrames++;
-        if (this.zeroFrames > 60) this.hasRealData = false;
-      }
-
-      // Ambient fallback — always runs, stronger when playing
       const t = this.time;
       const boost = this.isPlaying ? 1.8 : 1.0;
       for (let i = 0; i < 128; i++) {
@@ -391,18 +342,9 @@
       return;
     }
 
-    const connect = () => {
-      viz.connectAudio(audio);
-      viz.resumeCtx();
-      viz.isPlaying = true;
-    };
-
-    audio.addEventListener("play", connect);
-    audio.addEventListener("pause", () => {
-      viz.isPlaying = false;
-    });
-
-    if (!audio.paused) connect();
+    audio.addEventListener("play", () => { viz.isPlaying = true; });
+    audio.addEventListener("pause", () => { viz.isPlaying = false; });
+    if (!audio.paused) viz.isPlaying = true;
   }
   hookAudio();
 })();
