@@ -30,6 +30,9 @@
     lineOpacity: 1.0,
     fillOpacity: 0.10,
 
+    colorMix: 0,
+    colorDecay: 0.03,
+
     minDb: -80,
     maxDb: 0,
 
@@ -197,6 +200,7 @@
       this.bandAvg = new Float32Array(cfg.bands).fill(0.15);
       this.bandPeak = new Float32Array(cfg.bands).fill(0.3);
       this.bandDisplay = new Float32Array(cfg.bands);
+      this.bandColorAmp = new Float32Array(cfg.bands);
       this.bandBinMap = [];
 
       this.history = [];
@@ -337,6 +341,12 @@
           this.bandDisplay[b] *= cfg.decay;
         }
 
+        if (norm > this.bandColorAmp[b]) {
+          this.bandColorAmp[b] += (norm - this.bandColorAmp[b]) * 0.4;
+        } else {
+          this.bandColorAmp[b] *= (1 - cfg.colorDecay);
+        }
+
         this.history[b][this.writeCol] = this.bandDisplay[b];
       }
       this.writeCol = (this.writeCol + 1) % cfg.histW;
@@ -389,6 +399,7 @@
         this.bandAvg = new Float32Array(bands).fill(0.15);
         this.bandPeak = new Float32Array(bands).fill(0.3);
         this.bandDisplay = new Float32Array(bands);
+        this.bandColorAmp = new Float32Array(bands);
         this.writeCol = 0;
         this._buildBandMap(this.sampleRate);
       }
@@ -409,6 +420,7 @@
         this.bandAvg = new Float32Array(bands).fill(0.15);
         this.bandPeak = new Float32Array(bands).fill(0.3);
         this.bandDisplay = new Float32Array(bands);
+        this.bandColorAmp = new Float32Array(bands);
         this.writeCol = 0;
         this._buildBandMap(this.sampleRate);
       }
@@ -483,9 +495,9 @@
         d.lineMat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
 
-        const amp = this.bandDisplay[b] || 0;
-        d.lineMat.color.copy(_white).lerp(d.bandColor, amp);
-        d.fillMat.color.copy(_white).lerp(d.bandColor, amp);
+        const cBlend = 1 - (1 - (this.bandColorAmp[b] || 0)) * cfg.colorMix;
+        d.lineMat.color.copy(_white).lerp(d.bandColor, cBlend);
+        d.fillMat.color.copy(_white).lerp(d.bandColor, cBlend);
 
         for (let i = 0; i < histW; i++) {
           const x = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
@@ -519,6 +531,7 @@
         this.bandAvg = new Float32Array(bands).fill(0.15);
         this.bandPeak = new Float32Array(bands).fill(0.3);
         this.bandDisplay = new Float32Array(bands);
+        this.bandColorAmp = new Float32Array(bands);
         this.writeCol = 0;
         this._buildBandMap(this.sampleRate);
       }
@@ -571,9 +584,10 @@
         const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
         d.mat.opacity = opacity;
 
-        const colR = 1 + (d.bandColor.r - 1) * amp;
-        const colG = 1 + (d.bandColor.g - 1) * amp;
-        const colB = 1 + (d.bandColor.b - 1) * amp;
+        const cBlend = 1 - (1 - (this.bandColorAmp[d.band] || 0)) * cfg.colorMix;
+        const colR = 1 + (d.bandColor.r - 1) * cBlend;
+        const colG = 1 + (d.bandColor.g - 1) * cBlend;
+        const colB = 1 + (d.bandColor.b - 1) * cBlend;
 
         const drift = cfg.flowStartDrift;
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
@@ -725,6 +739,8 @@
     "s-floor-factor": { key: "floorFactor" },
     "s-line-opacity": { key: "lineOpacity" },
     "s-fill-opacity": { key: "fillOpacity" },
+    "s-color-mix":    { key: "colorMix" },
+    "s-color-decay":  { key: "colorDecay" },
     "s-min-db":       { key: "minDb" },
     "s-max-db":       { key: "maxDb" },
     "s-audio-delay":  { key: "audioDelay" },
