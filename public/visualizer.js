@@ -4,9 +4,9 @@
   if (typeof THREE === "undefined") return;
 
   /* ===== Config ===== */
-  const BANDS = 24;
+  const BANDS = 12;
   const HIST_W = 400;
-  const BOKEH_COUNT = 18;
+  const BOKEH_COUNT = 14;
   const FFT_SIZE = 2048;
   const FREQ_LO = 30;
   const FREQ_HI = 18000;
@@ -15,7 +15,14 @@
   const SMOOTH = 1.0;
   const AMBIENT_SMOOTH = 0.04;
 
-  /* ===== Hz → nm → RGB ===== */
+  const ORBIT_SPEED = 0.06;
+  const ORBIT_RADIUS = 6;
+  const ORBIT_HEIGHT = 3.5;
+  const CHART_WIDTH = 8;
+  const CHART_DEPTH = 5;
+  const PEAK_HEIGHT = 2.5;
+
+  /* ===== Hz helpers ===== */
 
   function hzToNm(hz) {
     const t = Math.log(hz / FREQ_LO) / Math.log(FREQ_HI / FREQ_LO);
@@ -43,84 +50,14 @@
   function hzToRGB(hz) { return nmToRGB(hzToNm(hz)); }
   function rand(a, b) { return a + Math.random() * (b - a); }
 
-  /* ===== Color-map texture (256×1) ===== */
+  /* ===== Bokeh shaders ===== */
 
-  function buildColorMap() {
-    const d = new Uint8Array(256 * 4);
-    for (let i = 0; i < 256; i++) {
-      const t = i / 255;
-      const [r, g, b] = hzToRGB(FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, t));
-      d[i * 4] = Math.round(r * 255);
-      d[i * 4 + 1] = Math.round(g * 255);
-      d[i * 4 + 2] = Math.round(b * 255);
-      d[i * 4 + 3] = 255;
-    }
-    const tex = new THREE.DataTexture(d, 256, 1, THREE.RGBAFormat);
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearFilter;
-    tex.needsUpdate = true;
-    return tex;
-  }
-
-  /* ===== Shaders ===== */
-
-  const quadVert = `
+  const bokehVert = `
     varying vec2 vUv;
     void main() {
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }`;
-
-  const specFrag = [
-    "#define BANDS 40",
-    "precision highp float;",
-    "uniform sampler2D uHistory;",
-    "uniform sampler2D uColors;",
-    "uniform float uWritePos;",
-    "varying vec2 vUv;",
-    "",
-    "void main() {",
-    "  float y = (vUv.y - 0.5) * 2.0;",
-    "  float slotH = 2.0 / float(BANDS);",
-    "  float bandH = slotH * 0.85;",
-    "  int slot = int(floor((y + 1.0) / slotH));",
-    "",
-    "  vec3 acc = vec3(0.0);",
-    "  float occlude = 0.0;",
-    "  float histX = mod(vUv.x + uWritePos, 1.0);",
-    "",
-    "  for (int di = -4; di <= 4; di++) {",
-    "    int idx = slot + di;",
-    "    if (idx < 0 || idx >= BANDS) continue;",
-    "",
-    "    float bandBase = -1.0 + float(idx) * slotH;",
-    "    float bandT = (float(idx) + 0.5) / float(BANDS);",
-    "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
-    "",
-    "    float ridgeY = bandBase + amp * slotH * 3.0;",
-    "    float dist = y - ridgeY;",
-    "",
-    "    float glow = exp(-dist * dist / 0.00004);",
-    "",
-    "    float fill = 0.0;",
-    "    if (y >= bandBase && y < ridgeY) {",
-    "      fill = smoothstep(bandBase, ridgeY, y) * 0.25;",
-    "    }",
-    "",
-    "    acc += vec3(1.0) * (glow * 2.5 + fill);",
-    "",
-    "    if (idx < slot && y < ridgeY) {",
-    "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.8);",
-    "    }",
-    "  }",
-    "",
-    "  vec3 result = vec3(0.039) + acc;",
-    "  result *= 1.0 - occlude;",
-    "  gl_FragColor = vec4(result, 1.0);",
-    "}",
-  ].join("\n");
-
-  const bokehVert = quadVert;
 
   const bokehFrag = `
     uniform float uAlpha;
@@ -145,13 +82,15 @@
       this.renderer.autoClear = false;
 
       this.aspect = 1;
+
+      /* Bokeh stays 2D */
       this.bokehCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
       this.bokehCam.position.z = 5;
-      this.lineCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      this.lineCam.position.z = 0.5;
-
       this.bokehScene = new THREE.Scene();
-      this.lineScene = new THREE.Scene();
+
+      /* 3D scene for ridges */
+      this.ridgeCam = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+      this.ridgeScene = new THREE.Scene();
 
       this.audioCtx = null;
       this.analyser = null;
@@ -162,37 +101,27 @@
       this.connected = false;
       this.isPlaying = false;
 
-      /*  Per-band adaptive tracking:
-       *  bandAvg  — slow-moving average (the "flat" baseline)
-       *  bandPeak — slow-decaying ceiling
-       *  bandDisplay — fast-attack / slow-decay output for history  */
       this.bandAvg = new Float32Array(BANDS).fill(0.15);
       this.bandPeak = new Float32Array(BANDS).fill(0.3);
       this.bandDisplay = new Float32Array(BANDS);
       this.bandBinMap = [];
 
+      /* Circular history buffer: BANDS rows × HIST_W columns */
+      this.history = [];
+      for (let b = 0; b < BANDS; b++) {
+        this.history.push(new Float32Array(HIST_W));
+      }
+      this.writeCol = 0;
+
       this.time = 0;
       this.lastTime = performance.now() / 1000;
       this.bokeh = [];
-
-      this.histPixels = new Uint8Array(HIST_W * BANDS * 4);
-      this.histTex = new THREE.DataTexture(
-        this.histPixels, HIST_W, BANDS, THREE.RGBAFormat
-      );
-      this.histTex.magFilter = THREE.LinearFilter;
-      this.histTex.minFilter = THREE.LinearFilter;
-      this.histTex.wrapS = THREE.RepeatWrapping;
-      this.histTex.wrapT = THREE.ClampToEdgeWrapping;
-      this.histTex.needsUpdate = true;
-      this.writeCol = 0;
-
-      this.colorMap = buildColorMap();
 
       this._resize();
       window.addEventListener("resize", () => this._resize());
       this._buildBandMap(this.sampleRate);
       this._buildBokeh();
-      this._buildQuad();
+      this._buildRidges();
       this._loop();
     }
 
@@ -202,9 +131,13 @@
       const h = p.clientHeight;
       this.aspect = w / h;
       this.renderer.setSize(w, h);
+
       this.bokehCam.left = -this.aspect;
       this.bokehCam.right = this.aspect;
       this.bokehCam.updateProjectionMatrix();
+
+      this.ridgeCam.aspect = this.aspect;
+      this.ridgeCam.updateProjectionMatrix();
     }
 
     _buildBandMap(sr) {
@@ -278,7 +211,7 @@
       }
     }
 
-    /* ---- history with per-band normalization ---- */
+    /* ---- history ---- */
 
     _updateHistory() {
       for (let b = 0; b < BANDS; b++) {
@@ -302,18 +235,58 @@
           this.bandDisplay[b] *= 0.55;
         }
 
-        const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
-        const idx = (b * HIST_W + this.writeCol) * 4;
-        this.histPixels[idx] = v;
-        this.histPixels[idx + 1] = v;
-        this.histPixels[idx + 2] = v;
-        this.histPixels[idx + 3] = 255;
+        this.history[b][this.writeCol] = this.bandDisplay[b];
       }
       this.writeCol = (this.writeCol + 1) % HIST_W;
-      this.histTex.needsUpdate = true;
     }
 
-    /* ---- build ---- */
+    /* ---- build 3D ridges ---- */
+
+    _buildRidges() {
+      this.ridgeLines = [];
+
+      for (let b = 0; b < BANDS; b++) {
+        const positions = new Float32Array(HIST_W * 3);
+        const z = -CHART_DEPTH / 2 + (b / (BANDS - 1)) * CHART_DEPTH;
+
+        for (let i = 0; i < HIST_W; i++) {
+          positions[i * 3] = -CHART_WIDTH / 2 + (i / (HIST_W - 1)) * CHART_WIDTH;
+          positions[i * 3 + 1] = 0;
+          positions[i * 3 + 2] = z;
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+        const mat = new THREE.LineBasicMaterial({
+          color: 0xffffff,
+          linewidth: 1,
+          transparent: true,
+          opacity: 0.9,
+        });
+
+        const line = new THREE.Line(geo, mat);
+        this.ridgeScene.add(line);
+        this.ridgeLines.push({ line, geo, z });
+      }
+    }
+
+    _updateRidges() {
+      for (let b = 0; b < BANDS; b++) {
+        const posAttr = this.ridgeLines[b].geo.getAttribute("position");
+        const arr = posAttr.array;
+
+        for (let i = 0; i < HIST_W; i++) {
+          const histIdx = (this.writeCol + i) % HIST_W;
+          const amp = this.history[b][histIdx];
+          arr[i * 3 + 1] = amp * PEAK_HEIGHT;
+        }
+
+        posAttr.needsUpdate = true;
+      }
+    }
+
+    /* ---- bokeh ---- */
 
     _buildBokeh() {
       const geo = new THREE.PlaneGeometry(1, 1);
@@ -349,25 +322,6 @@
       }
     }
 
-    _buildQuad() {
-      const mat = new THREE.ShaderMaterial({
-        uniforms: {
-          uHistory: { value: this.histTex },
-          uColors: { value: this.colorMap },
-          uWritePos: { value: 0 },
-        },
-        vertexShader: quadVert,
-        fragmentShader: specFrag,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      this.lineQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
-      this.lineScene.add(this.lineQuad);
-    }
-
-    /* ---- update ---- */
-
     _updBokeh() {
       let en = 0;
       for (let b = 0; b < BANDS; b++) en += this.bandDisplay[b];
@@ -383,6 +337,18 @@
       });
     }
 
+    /* ---- camera orbit ---- */
+
+    _updateCamera() {
+      const angle = this.time * ORBIT_SPEED;
+      this.ridgeCam.position.set(
+        Math.sin(angle) * ORBIT_RADIUS,
+        ORBIT_HEIGHT,
+        Math.cos(angle) * ORBIT_RADIUS
+      );
+      this.ridgeCam.lookAt(0, 0.5, 0);
+    }
+
     /* ---- loop ---- */
 
     _loop() {
@@ -394,13 +360,13 @@
 
       this._freq();
       this._updateHistory();
+      this._updateRidges();
       this._updBokeh();
-
-      this.lineQuad.material.uniforms.uWritePos.value = this.writeCol / HIST_W;
+      this._updateCamera();
 
       this.renderer.clear();
       this.renderer.render(this.bokehScene, this.bokehCam);
-      this.renderer.render(this.lineScene, this.lineCam);
+      this.renderer.render(this.ridgeScene, this.ridgeCam);
     }
   }
 
