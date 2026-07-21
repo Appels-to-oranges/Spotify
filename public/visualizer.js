@@ -32,6 +32,8 @@
 
     minDb: -80,
     maxDb: 0,
+
+    audioDelay: 0.10,
   };
 
   /* Catmull-Rom interpolation */
@@ -166,7 +168,7 @@
         this.analyser.smoothingTimeConstant = cfg.fftSmooth;
         src.connect(this.analyser);
         this.delayNode = this.audioCtx.createDelay(1.0);
-        this.delayNode.delayTime.value = 0.10;
+        this.delayNode.delayTime.value = cfg.audioDelay;
         this.analyser.connect(this.delayNode);
         this.delayNode.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -191,6 +193,8 @@
           this.analyser.minDecibels = cfg.minDb;
         if (this.analyser.maxDecibels !== cfg.maxDb)
           this.analyser.maxDecibels = cfg.maxDb;
+        if (this.delayNode && this.delayNode.delayTime.value !== cfg.audioDelay)
+          this.delayNode.delayTime.value = cfg.audioDelay;
 
         this.analyser.getByteFrequencyData(this.rawData);
         let sum = 0;
@@ -490,6 +494,7 @@
     "s-fill-opacity": { key: "fillOpacity" },
     "s-min-db":       { key: "minDb" },
     "s-max-db":       { key: "maxDb" },
+    "s-audio-delay":  { key: "audioDelay" },
   };
 
   let rebuildTimer = null;
@@ -502,9 +507,10 @@
     slider.addEventListener("input", () => {
       const v = parseFloat(slider.value);
       cfg[key] = v;
-      if (valEl) valEl.textContent = v % 1 === 0 ? v : v.toFixed(
-        v < 0.01 ? 4 : v < 1 ? 2 : 1
-      );
+      if (valEl) {
+        if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+        else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
+      }
 
       if (rebuild) {
         clearTimeout(rebuildTimer);
