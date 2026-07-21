@@ -5,13 +5,13 @@
 
   /* ===== Config ===== */
   const BANDS = 40;
-  const HIST_W = 350;
+  const HIST_W = 280;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
   const FREQ_LO = 30;
   const FREQ_HI = 18000;
-  const NM_RED = 645;
-  const NM_VIOLET = 410;
+  const NM_RED = 780;
+  const NM_VIOLET = 380;
   const SMOOTH = 1.0;
   const AMBIENT_SMOOTH = 0.04;
 
