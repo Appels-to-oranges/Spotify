@@ -163,7 +163,9 @@
 
   /* ===== Visualizer ===== */
 
-  const PERLIN_PTS = 200;
+  const FLOW_LINES_PER_BAND = 10;
+  const FLOW_STEPS = 80;
+  const FLOW_STEP_SIZE = 0.12;
 
   class Visualizer {
     constructor(canvas) {
@@ -514,46 +516,58 @@
         const [cr, cg, cb] = hzToRGB(hz);
         const color = new THREE.Color(cr, cg, cb);
 
-        const positions = new Float32Array(PERLIN_PTS * 3);
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-        const mat = new THREE.LineBasicMaterial({
-          color, transparent: true, opacity: cfg.lineOpacity,
-        });
-        const line = new THREE.Line(geo, mat);
-        this.scene.add(line);
+        for (let l = 0; l < FLOW_LINES_PER_BAND; l++) {
+          const positions = new Float32Array(FLOW_STEPS * 3);
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+          const mat = new THREE.LineBasicMaterial({
+            color, transparent: true, opacity: cfg.lineOpacity * 0.6,
+          });
+          const line = new THREE.Line(geo, mat);
+          this.scene.add(line);
 
-        this.perlinData.push({ line, geo, mat, bandT, bandSeed: b * 37.7 });
+          const seed = b * 13.7 + l * 7.3;
+          const startX = simplex3(seed, 0, 0) * cfg.chartSize * 0.5;
+          const startZ = simplex3(0, seed, 0) * cfg.chartSize * 0.5;
+
+          this.perlinData.push({ line, geo, mat, band: b, bandT, seed, startX, startZ });
+        }
       }
     }
 
     _updatePerlin() {
       const half = cfg.chartSize / 2;
-      const t = this.time;
+      const t = this.time * 0.3;
+      const noiseFreq = 0.25;
 
-      for (let b = 0; b < this.perlinData.length && b < this.activeBands; b++) {
-        const d = this.perlinData[b];
+      for (let p = 0; p < this.perlinData.length; p++) {
+        const d = this.perlinData[p];
         const arr = d.geo.getAttribute("position").array;
-        const amp = this.bandDisplay[b];
-        const seed = d.bandSeed;
-        const noiseScale = 0.3;
-        const wander = 3.0;
-        const speed = 0.4;
+        const amp = this.bandDisplay[d.band] || 0;
+        const turbulence = 0.8 + amp * 3.0;
 
-        d.mat.opacity = cfg.lineOpacity;
+        d.mat.opacity = Math.min(1, (0.15 + amp * 0.8)) * cfg.lineOpacity;
 
-        for (let i = 0; i < PERLIN_PTS; i++) {
-          const pt = i / (PERLIN_PTS - 1);
-          const baseX = -half + pt * cfg.chartSize;
-          const baseZ = -half + d.bandT * cfg.chartSize;
+        let cx = d.startX + simplex3(d.seed + t * 0.5, 0, 0) * 2;
+        let cz = d.startZ + simplex3(0, d.seed + t * 0.5, 0) * 2;
+        let cy = amp * cfg.peakHeight * 0.3;
 
-          const nx = fbm3(pt * 4 + seed, t * speed, 0, 3);
-          const nz = fbm3(pt * 4 + seed, t * speed, 100, 3);
-          const ny = fbm3(pt * 4 + seed + 50, t * speed * 0.7, 200, 3);
+        for (let i = 0; i < FLOW_STEPS; i++) {
+          arr[i * 3]     = cx;
+          arr[i * 3 + 1] = cy;
+          arr[i * 3 + 2] = cz;
 
-          arr[i * 3]     = baseX + nx * wander * (0.3 + amp * 0.7);
-          arr[i * 3 + 1] = (amp * cfg.peakHeight * 1.5) + ny * (0.5 + amp * 2.0);
-          arr[i * 3 + 2] = baseZ + nz * wander * (0.3 + amp * 0.7);
+          const angle = fbm3(cx * noiseFreq, cz * noiseFreq, t, 3) * Math.PI * 2 * turbulence;
+          const pitch = fbm3(cx * noiseFreq + 100, cz * noiseFreq + 100, t, 2) * Math.PI * 0.5 * turbulence;
+
+          const step = FLOW_STEP_SIZE * (0.8 + amp * 0.5);
+          cx += Math.cos(angle) * step;
+          cz += Math.sin(angle) * step;
+          cy += Math.sin(pitch) * step * 0.4;
+
+          cx = Math.max(-half, Math.min(half, cx));
+          cz = Math.max(-half, Math.min(half, cz));
+          cy = Math.max(0, cy);
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
