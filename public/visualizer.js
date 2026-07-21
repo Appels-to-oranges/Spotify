@@ -163,7 +163,9 @@
 
   /* ===== Visualizer ===== */
 
-  const FLOW_CURVE = 1.5;
+  const FLOW_PER_BAND = 50;
+  const FLOW_STEPS = 50;
+  const FLOW_STEP_SIZE = 0.18;
 
   class Visualizer {
     constructor(canvas) {
@@ -354,9 +356,7 @@
 
       this.perlinData.forEach(d => {
         this.scene.remove(d.line);
-        this.scene.remove(d.fillMesh);
-        d.lineGeo.dispose(); d.lineMat.dispose();
-        d.fillGeo.dispose(); d.fillMat.dispose();
+        d.geo.dispose(); d.mat.dispose();
       });
       this.perlinData = [];
     }
@@ -495,17 +495,16 @@
     }
 
     /* ======== PERLINSTATION theme ======== */
-    /* One flowing line per band. X/Z path curves through a slow noise field,
-       Y displacement is driven by audio history -- same mounds as WaveStation. */
+    /* Dense flow field: many streamlines per band trace through a shared noise
+       vector field.  Audio amplitude modulates opacity, height, and reach. */
 
     _rebuildPerlin() {
       const bands = cfg.bands;
-      const histW = cfg.histW;
 
-      if (bands !== this.activeBands || histW !== this.history[0]?.length) {
+      if (bands !== this.activeBands) {
         this.activeBands = bands;
         this.history = [];
-        for (let b = 0; b < bands; b++) this.history.push(new Float32Array(histW));
+        for (let b = 0; b < bands; b++) this.history.push(new Float32Array(cfg.histW));
         this.bandAvg = new Float32Array(bands).fill(0.15);
         this.bandPeak = new Float32Array(bands).fill(0.3);
         this.bandDisplay = new Float32Array(bands);
@@ -513,98 +512,71 @@
         this._buildBandMap(this.sampleRate);
       }
 
+      const half = cfg.chartSize / 2;
+
       for (let b = 0; b < bands; b++) {
         const bandT = bands > 1 ? b / (bands - 1) : 0.5;
         const hz = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
         const color = new THREE.Color(cr, cg, cb);
 
-        const linePos = new Float32Array(histW * 3);
-        const lineGeo = new THREE.BufferGeometry();
-        lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
-        const lineMat = new THREE.LineBasicMaterial({
-          color, transparent: true, opacity: cfg.lineOpacity,
-        });
-        const line = new THREE.Line(lineGeo, lineMat);
-        this.scene.add(line);
+        for (let l = 0; l < FLOW_PER_BAND; l++) {
+          const positions = new Float32Array(FLOW_STEPS * 3);
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+          const mat = new THREE.LineBasicMaterial({
+            color, transparent: true, opacity: 0.05, depthWrite: false,
+          });
+          const line = new THREE.Line(geo, mat);
+          this.scene.add(line);
 
-        const fillVerts = new Float32Array(histW * 2 * 3);
-        const fillGeo = new THREE.BufferGeometry();
-        fillGeo.setAttribute("position", new THREE.BufferAttribute(fillVerts, 3));
-        const indices = [];
-        for (let i = 0; i < histW - 1; i++) {
-          indices.push(i*2, i*2+1, (i+1)*2);
-          indices.push(i*2+1, (i+1)*2+1, (i+1)*2);
+          const seed = b * 31.7 + l * 3.1;
+          const sx = simplex3(seed, 0, 0) * half * 0.95;
+          const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.4;
+
+          this.perlinData.push({ line, geo, mat, band: b, bandT, sx, sz, seed });
         }
-        fillGeo.setIndex(indices);
-        const fillMat = new THREE.MeshBasicMaterial({
-          color, transparent: true, opacity: cfg.fillOpacity,
-          side: THREE.DoubleSide, depthWrite: false,
-        });
-        const fillMesh = new THREE.Mesh(fillGeo, fillMat);
-        this.scene.add(fillMesh);
-
-        this.perlinData.push({
-          line, lineGeo, lineMat, fillGeo, fillMat, fillMesh,
-          bandT, seed: b * 17.3,
-        });
       }
     }
 
     _updatePerlin() {
-      const histW = cfg.histW;
       const half = cfg.chartSize / 2;
-      const t = this.time * 0.15;
-      const noiseFreq = 0.08;
-      const raw = new Float32Array(histW);
-      const fadeLen = Math.min(40, Math.floor(histW * 0.08));
+      const t = this.time * 0.1;
+      const noiseFreq = 0.15;
 
-      for (let b = 0; b < this.perlinData.length && b < this.activeBands; b++) {
-        const d = this.perlinData[b];
-        const baseZ = -half + d.bandT * cfg.chartSize;
+      for (let p = 0; p < this.perlinData.length; p++) {
+        const d = this.perlinData[p];
+        const arr = d.geo.getAttribute("position").array;
+        const amp = this.bandDisplay[d.band] || 0;
 
-        /* Read & smooth history -- identical to WaveStation */
-        for (let i = 0; i < histW; i++) {
-          let v = this.history[b][(this.writeCol + i) % histW];
-          if (i < fadeLen) v *= i / fadeLen;
-          else if (i > histW - fadeLen) v *= (histW - i) / fadeLen;
-          raw[i] = v;
-        }
-        this._smoothPass(raw, cfg.smoothPasses);
-        const smooth = catmullRom(raw, histW);
+        const opacity = (0.05 + amp * 0.9) * cfg.lineOpacity;
+        d.mat.opacity = opacity;
 
-        const lineArr = d.lineGeo.getAttribute("position").array;
-        const fillArr = d.fillGeo.getAttribute("position").array;
-        d.lineMat.opacity = cfg.lineOpacity;
-        d.fillMat.opacity = cfg.fillOpacity;
+        const startX = d.sx + simplex3(d.seed, t * 0.3, 0) * 1.5;
+        const startZ = d.sz + simplex3(0, d.seed, t * 0.3) * 0.8;
+        const yBase = amp * cfg.peakHeight;
 
-        for (let i = 0; i < histW; i++) {
-          const pt = i / (histW - 1);
-          const baseX = -half + pt * cfg.chartSize;
+        let cx = startX;
+        let cz = startZ;
 
-          /* Gentle noise displacement in X/Z */
-          const nx = fbm3(pt * 3 + d.seed, d.bandT * 4, t, 2);
-          const nz = fbm3(d.seed + 50, pt * 3, t, 2);
+        for (let i = 0; i < FLOW_STEPS; i++) {
+          const angle = fbm3(cx * noiseFreq, cz * noiseFreq, t, 3) * Math.PI * 2;
+          const yNoise = fbm3(cx * noiseFreq + 200, cz * noiseFreq + 200, t, 2);
+          const y = yBase * (0.5 + 0.5 * (yNoise + 1));
 
-          const x = baseX + nx * FLOW_CURVE;
-          const z = baseZ + nz * FLOW_CURVE;
-          const y = Math.max(0, smooth[i]) * cfg.peakHeight;
+          arr[i * 3]     = cx;
+          arr[i * 3 + 1] = y;
+          arr[i * 3 + 2] = cz;
 
-          lineArr[i * 3]     = x;
-          lineArr[i * 3 + 1] = y;
-          lineArr[i * 3 + 2] = z;
+          const step = FLOW_STEP_SIZE * (0.6 + amp * 0.8);
+          cx += Math.cos(angle) * step;
+          cz += Math.sin(angle) * step;
 
-          const ti = i * 2;
-          fillArr[ti * 3]         = x;
-          fillArr[ti * 3 + 1]     = y;
-          fillArr[ti * 3 + 2]     = z;
-          fillArr[(ti+1) * 3]     = x;
-          fillArr[(ti+1) * 3 + 1] = 0;
-          fillArr[(ti+1) * 3 + 2] = z;
+          cx = Math.max(-half, Math.min(half, cx));
+          cz = Math.max(-half, Math.min(half, cz));
         }
 
-        d.lineGeo.getAttribute("position").needsUpdate = true;
-        d.fillGeo.getAttribute("position").needsUpdate = true;
+        d.geo.getAttribute("position").needsUpdate = true;
       }
     }
 
