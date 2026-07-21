@@ -3,24 +3,38 @@
 
   if (typeof THREE === "undefined") return;
 
-  /* ===== Config ===== */
-  const BANDS = 12;
-  const HIST_W = 400;
-  const FFT_SIZE = 2048;
-  const FREQ_LO = 30;
-  const FREQ_HI = 18000;
-  const NM_RED = 780;
-  const NM_VIOLET = 380;
-  const SMOOTH = 1.0;
-  const AMBIENT_SMOOTH = 0.04;
+  /* ===== Tunables (mutable at runtime) ===== */
+  const cfg = {
+    bands: 12,
+    histW: 400,
+    fftSize: 2048,
+    freqLo: 30,
+    freqHi: 18000,
+    nmRed: 780,
+    nmViolet: 380,
 
-  const ORBIT_SPEED = 0.06;
-  const ORBIT_RADIUS = 9;
-  const ORBIT_HEIGHT = 14;
-  const CHART_SIZE = 6;
-  const PEAK_HEIGHT = 4.0;
+    orbitSpeed: 0.06,
+    orbitRadius: 9,
+    orbitHeight: 14,
+    chartSize: 6,
+    peakHeight: 4.0,
+    fov: 40,
 
-  /* Catmull-Rom spline: returns smoothed Y values for an input array */
+    smoothPasses: 3,
+    fftSmooth: 0.05,
+    decay: 0.55,
+    avgRate: 0.003,
+    peakDecay: 0.003,
+    floorFactor: 0.92,
+
+    lineOpacity: 0.95,
+    fillOpacity: 0.15,
+
+    minDb: -60,
+    maxDb: -10,
+  };
+
+  /* Catmull-Rom interpolation */
   function catmullRom(src, outLen) {
     const out = new Float32Array(outLen);
     const n = src.length;
@@ -28,12 +42,10 @@
       const t = (i / (outLen - 1)) * (n - 1);
       const idx = Math.floor(t);
       const frac = t - idx;
-
       const p0 = src[Math.max(0, idx - 1)];
       const p1 = src[idx];
       const p2 = src[Math.min(n - 1, idx + 1)];
       const p3 = src[Math.min(n - 1, idx + 2)];
-
       const t2 = frac * frac;
       const t3 = t2 * frac;
       out[i] = 0.5 * (
@@ -46,11 +58,10 @@
     return out;
   }
 
-  /* ===== Hz helpers ===== */
-
+  /* Hz → nm → RGB */
   function hzToNm(hz) {
-    const t = Math.log(hz / FREQ_LO) / Math.log(FREQ_HI / FREQ_LO);
-    return NM_RED - t * (NM_RED - NM_VIOLET);
+    const t = Math.log(hz / cfg.freqLo) / Math.log(cfg.freqHi / cfg.freqLo);
+    return cfg.nmRed - t * (cfg.nmRed - cfg.nmViolet);
   }
 
   function nmToRGB(nm) {
@@ -78,35 +89,34 @@
   class Visualizer {
     constructor(canvas) {
       this.canvas = canvas;
-
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
       this.renderer.setClearColor(0x0a0a0a, 1);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
       this.aspect = 1;
-
-      this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+      this.camera = new THREE.PerspectiveCamera(cfg.fov, 1, 0.1, 200);
       this.scene = new THREE.Scene();
 
       this.audioCtx = null;
       this.analyser = null;
       this.rawData = null;
       this.sampleRate = 44100;
-      this.binCount = FFT_SIZE / 2;
+      this.binCount = cfg.fftSize / 2;
       this.smoothed = new Float32Array(this.binCount);
       this.connected = false;
       this.isPlaying = false;
 
-      this.bandAvg = new Float32Array(BANDS).fill(0.15);
-      this.bandPeak = new Float32Array(BANDS).fill(0.3);
-      this.bandDisplay = new Float32Array(BANDS);
+      this.bandAvg = new Float32Array(cfg.bands).fill(0.15);
+      this.bandPeak = new Float32Array(cfg.bands).fill(0.3);
+      this.bandDisplay = new Float32Array(cfg.bands);
       this.bandBinMap = [];
 
       this.history = [];
-      for (let b = 0; b < BANDS; b++) {
-        this.history.push(new Float32Array(HIST_W));
+      for (let b = 0; b < cfg.bands; b++) {
+        this.history.push(new Float32Array(cfg.histW));
       }
       this.writeCol = 0;
+      this.activeBands = cfg.bands;
 
       this.time = 0;
       this.lastTime = performance.now() / 1000;
@@ -130,11 +140,11 @@
 
     _buildBandMap(sr) {
       this.sampleRate = sr;
-      const hzPerBin = sr / FFT_SIZE;
+      const hzPerBin = sr / cfg.fftSize;
       this.bandBinMap = [];
-      for (let i = 0; i < BANDS; i++) {
-        const f0 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, i / BANDS);
-        const f1 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, (i + 1) / BANDS);
+      for (let i = 0; i < cfg.bands; i++) {
+        const f0 = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, i / cfg.bands);
+        const f1 = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, (i + 1) / cfg.bands);
         const b0 = Math.max(0, Math.floor(f0 / hzPerBin));
         const b1 = Math.min(this.binCount, Math.max(Math.ceil(f1 / hzPerBin), b0 + 1));
         this.bandBinMap.push([b0, b1]);
@@ -150,10 +160,10 @@
         this._buildBandMap(this.audioCtx.sampleRate);
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
-        this.analyser.fftSize = FFT_SIZE;
-        this.analyser.minDecibels = -60;
-        this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.05;
+        this.analyser.fftSize = cfg.fftSize;
+        this.analyser.minDecibels = cfg.minDb;
+        this.analyser.maxDecibels = cfg.maxDb;
+        this.analyser.smoothingTimeConstant = cfg.fftSmooth;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -172,13 +182,20 @@
 
     _freq() {
       if (this.connected && this.analyser && this.isPlaying) {
+        if (this.analyser.smoothingTimeConstant !== cfg.fftSmooth)
+          this.analyser.smoothingTimeConstant = cfg.fftSmooth;
+        if (this.analyser.minDecibels !== cfg.minDb)
+          this.analyser.minDecibels = cfg.minDb;
+        if (this.analyser.maxDecibels !== cfg.maxDb)
+          this.analyser.maxDecibels = cfg.maxDb;
+
         this.analyser.getByteFrequencyData(this.rawData);
         let sum = 0;
         for (let i = 0; i < this.rawData.length; i++) sum += this.rawData[i];
         if (sum > 200) {
           for (let i = 0; i < this.binCount; i++) {
             const r = this.rawData[i] / 255;
-            this.smoothed[i] += (r - this.smoothed[i]) * SMOOTH;
+            this.smoothed[i] += (r - this.smoothed[i]) * 1.0;
           }
           return;
         }
@@ -195,56 +212,85 @@
             Math.cos(t * 1.0) * 0.06 * (1 - f)) *
           fall * boost;
         this.smoothed[i] +=
-          (Math.max(0, Math.min(1, v)) - this.smoothed[i]) * AMBIENT_SMOOTH;
+          (Math.max(0, Math.min(1, v)) - this.smoothed[i]) * 0.04;
       }
     }
 
     /* ---- history ---- */
 
     _updateHistory() {
-      for (let b = 0; b < BANDS; b++) {
+      const bands = this.activeBands;
+      for (let b = 0; b < bands; b++) {
         const [lo, hi] = this.bandBinMap[b];
         let s = 0;
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
         const raw = s / (hi - lo);
 
-        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.003;
+        this.bandAvg[b] += (raw - this.bandAvg[b]) * cfg.avgRate;
 
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
-        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.003;
+        else this.bandPeak[b] += (raw - this.bandPeak[b]) * cfg.peakDecay;
 
-        const floor = this.bandAvg[b] * 0.92;
+        const floor = this.bandAvg[b] * cfg.floorFactor;
         const range = Math.max(this.bandPeak[b] - floor, 0.01);
         const norm = Math.min(1, Math.max(0, (raw - floor) / range));
 
         if (norm > this.bandDisplay[b]) {
           this.bandDisplay[b] = norm;
         } else {
-          this.bandDisplay[b] *= 0.55;
+          this.bandDisplay[b] *= cfg.decay;
         }
 
         this.history[b][this.writeCol] = this.bandDisplay[b];
       }
-      this.writeCol = (this.writeCol + 1) % HIST_W;
+      this.writeCol = (this.writeCol + 1) % cfg.histW;
     }
 
-    /* ---- build 3D ridges ---- */
+    /* ---- build / rebuild 3D ridges ---- */
 
     _buildRidges() {
-      this.ridgeLines = [];
+      this.ridgeData = [];
+      this._rebuildRidges();
+    }
 
-      for (let b = 0; b < BANDS; b++) {
-        const bandT = b / (BANDS - 1);
-        const hz = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, bandT);
+    _rebuildRidges() {
+      this.ridgeData.forEach(d => {
+        this.scene.remove(d.line);
+        this.scene.remove(d.fillMesh);
+        d.lineGeo.dispose();
+        d.lineMat.dispose();
+        d.fillGeo.dispose();
+        d.fillMat.dispose();
+      });
+      this.ridgeData = [];
+
+      const bands = cfg.bands;
+      const histW = cfg.histW;
+
+      if (bands !== this.activeBands || histW !== this.history[0]?.length) {
+        this.activeBands = bands;
+        this.history = [];
+        for (let b = 0; b < bands; b++) {
+          this.history.push(new Float32Array(histW));
+        }
+        this.bandAvg = new Float32Array(bands).fill(0.15);
+        this.bandPeak = new Float32Array(bands).fill(0.3);
+        this.bandDisplay = new Float32Array(bands);
+        this.writeCol = 0;
+        this._buildBandMap(this.sampleRate);
+      }
+
+      for (let b = 0; b < bands; b++) {
+        const bandT = bands > 1 ? b / (bands - 1) : 0.5;
+        const hz = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
         const color = new THREE.Color(cr, cg, cb);
 
-        const z = -CHART_SIZE / 2 + bandT * CHART_SIZE;
+        const z = -cfg.chartSize / 2 + bandT * cfg.chartSize;
 
-        /* Line on top */
-        const linePos = new Float32Array(HIST_W * 3);
-        for (let i = 0; i < HIST_W; i++) {
-          linePos[i * 3] = -CHART_SIZE / 2 + (i / (HIST_W - 1)) * CHART_SIZE;
+        const linePos = new Float32Array(histW * 3);
+        for (let i = 0; i < histW; i++) {
+          linePos[i * 3] = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
           linePos[i * 3 + 1] = 0;
           linePos[i * 3 + 2] = z;
         }
@@ -252,38 +298,36 @@
         lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
         const lineMat = new THREE.LineBasicMaterial({
           color,
-          linewidth: 1,
           transparent: true,
-          opacity: 0.95,
+          opacity: cfg.lineOpacity,
         });
         const line = new THREE.Line(lineGeo, lineMat);
         this.scene.add(line);
 
-        /* Filled mesh underneath: triangle strip from ridge top down to y=0 */
-        const fillVerts = new Float32Array(HIST_W * 2 * 3);
+        const fillVerts = new Float32Array(histW * 2 * 3);
         const fillGeo = new THREE.BufferGeometry();
         fillGeo.setAttribute("position", new THREE.BufferAttribute(fillVerts, 3));
         const indices = [];
-        for (let i = 0; i < HIST_W - 1; i++) {
+        for (let i = 0; i < histW - 1; i++) {
           const top = i * 2;
           const bot = i * 2 + 1;
-          const topNext = (i + 1) * 2;
-          const botNext = (i + 1) * 2 + 1;
-          indices.push(top, bot, topNext);
-          indices.push(bot, botNext, topNext);
+          const topN = (i + 1) * 2;
+          const botN = (i + 1) * 2 + 1;
+          indices.push(top, bot, topN);
+          indices.push(bot, botN, topN);
         }
         fillGeo.setIndex(indices);
         const fillMat = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity: 0.15,
+          opacity: cfg.fillOpacity,
           side: THREE.DoubleSide,
           depthWrite: false,
         });
         const fillMesh = new THREE.Mesh(fillGeo, fillMat);
         this.scene.add(fillMesh);
 
-        this.ridgeLines.push({ line, lineGeo, fillGeo, z });
+        this.ridgeData.push({ line, lineGeo, lineMat, fillGeo, fillMat, fillMesh, z });
       }
     }
 
@@ -296,25 +340,30 @@
     }
 
     _updateRidges() {
-      const raw = new Float32Array(HIST_W);
+      const histW = cfg.histW;
+      const raw = new Float32Array(histW);
 
-      for (let b = 0; b < BANDS; b++) {
-        for (let i = 0; i < HIST_W; i++) {
-          raw[i] = this.history[b][(this.writeCol + i) % HIST_W];
+      for (let b = 0; b < this.activeBands && b < this.ridgeData.length; b++) {
+        for (let i = 0; i < histW; i++) {
+          raw[i] = this.history[b][(this.writeCol + i) % histW];
         }
 
-        this._smoothPass(raw, 3);
-        const smooth = catmullRom(raw, HIST_W);
+        this._smoothPass(raw, cfg.smoothPasses);
+        const smooth = catmullRom(raw, histW);
 
-        const lineAttr = this.ridgeLines[b].lineGeo.getAttribute("position");
+        const d = this.ridgeData[b];
+        const lineAttr = d.lineGeo.getAttribute("position");
         const lineArr = lineAttr.array;
-        const fillAttr = this.ridgeLines[b].fillGeo.getAttribute("position");
+        const fillAttr = d.fillGeo.getAttribute("position");
         const fillArr = fillAttr.array;
-        const z = this.ridgeLines[b].z;
+        const z = d.z;
 
-        for (let i = 0; i < HIST_W; i++) {
-          const x = -CHART_SIZE / 2 + (i / (HIST_W - 1)) * CHART_SIZE;
-          const y = Math.max(0, smooth[i]) * PEAK_HEIGHT;
+        d.lineMat.opacity = cfg.lineOpacity;
+        d.fillMat.opacity = cfg.fillOpacity;
+
+        for (let i = 0; i < histW; i++) {
+          const x = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
+          const y = Math.max(0, smooth[i]) * cfg.peakHeight;
 
           lineArr[i * 3 + 1] = y;
 
@@ -335,12 +384,16 @@
     /* ---- camera orbit ---- */
 
     _updateCamera() {
-      const angle = this.time * ORBIT_SPEED;
+      const angle = this.time * cfg.orbitSpeed;
       this.camera.position.set(
-        Math.sin(angle) * ORBIT_RADIUS,
-        ORBIT_HEIGHT,
-        Math.cos(angle) * ORBIT_RADIUS
+        Math.sin(angle) * cfg.orbitRadius,
+        cfg.orbitHeight,
+        Math.cos(angle) * cfg.orbitRadius
       );
+      if (this.camera.fov !== cfg.fov) {
+        this.camera.fov = cfg.fov;
+        this.camera.updateProjectionMatrix();
+      }
       this.camera.lookAt(0, 0.3, 0);
     }
 
@@ -367,6 +420,93 @@
   if (!canvas) return;
 
   const viz = new Visualizer(canvas);
+
+  /* Expose config and rebuild for the settings panel */
+  window.__vizCfg = cfg;
+  window.__vizRebuild = () => {
+    viz._rebuildRidges();
+  };
+  window.__vizResize = () => viz._resize();
+
+  /* ===== Settings wiring ===== */
+
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsPanel = document.getElementById("viz-settings");
+  const settingsClose = document.getElementById("settings-close");
+  const fullscreenBtn = document.getElementById("fullscreen-btn");
+  const vizSection = document.getElementById("visualizer-section");
+
+  if (settingsBtn && settingsPanel) {
+    settingsBtn.addEventListener("click", () => {
+      settingsPanel.classList.toggle("hidden");
+    });
+    settingsClose.addEventListener("click", () => {
+      settingsPanel.classList.add("hidden");
+    });
+  }
+
+  if (fullscreenBtn && vizSection) {
+    fullscreenBtn.addEventListener("click", () => {
+      if (!document.fullscreenElement) {
+        vizSection.requestFullscreen().catch(() => {});
+        vizSection.classList.add("fullscreen");
+      } else {
+        document.exitFullscreen();
+        vizSection.classList.remove("fullscreen");
+      }
+    });
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement) {
+        vizSection.classList.remove("fullscreen");
+      }
+      setTimeout(() => viz._resize(), 100);
+    });
+  }
+
+  /* Slider bindings: { sliderId: { key, needsRebuild } } */
+  const sliders = {
+    "s-orbit-radius": { key: "orbitRadius" },
+    "s-orbit-height": { key: "orbitHeight" },
+    "s-orbit-speed":  { key: "orbitSpeed" },
+    "s-fov":          { key: "fov" },
+    "s-bands":        { key: "bands", rebuild: true },
+    "s-peak-height":  { key: "peakHeight" },
+    "s-chart-size":   { key: "chartSize", rebuild: true },
+    "s-hist-w":       { key: "histW", rebuild: true },
+    "s-smooth-passes":{ key: "smoothPasses" },
+    "s-fft-smooth":   { key: "fftSmooth" },
+    "s-decay":        { key: "decay" },
+    "s-avg-rate":     { key: "avgRate" },
+    "s-peak-decay":   { key: "peakDecay" },
+    "s-floor-factor": { key: "floorFactor" },
+    "s-line-opacity": { key: "lineOpacity" },
+    "s-fill-opacity": { key: "fillOpacity" },
+    "s-min-db":       { key: "minDb" },
+    "s-max-db":       { key: "maxDb" },
+  };
+
+  let rebuildTimer = null;
+
+  Object.entries(sliders).forEach(([id, { key, rebuild }]) => {
+    const slider = document.getElementById(id);
+    const valEl = document.getElementById("sv-" + id.slice(2));
+    if (!slider) return;
+
+    slider.addEventListener("input", () => {
+      const v = parseFloat(slider.value);
+      cfg[key] = v;
+      if (valEl) valEl.textContent = v % 1 === 0 ? v : v.toFixed(
+        v < 0.01 ? 4 : v < 1 ? 2 : 1
+      );
+
+      if (rebuild) {
+        clearTimeout(rebuildTimer);
+        rebuildTimer = setTimeout(() => viz._rebuildRidges(), 150);
+      }
+    });
+  });
+
+  /* ===== Audio hook ===== */
 
   function hookAudio() {
     const audio = window.__wsAudio;
