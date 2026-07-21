@@ -522,10 +522,12 @@
 
         for (let l = 0; l < FLOW_PER_BAND; l++) {
           const positions = new Float32Array(FLOW_STEPS * 3);
+          const colors = new Float32Array(FLOW_STEPS * 3);
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+          geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
           const mat = new THREE.LineBasicMaterial({
-            color: 0xffffff, transparent: true, opacity: 0.05, depthWrite: false,
+            vertexColors: true, transparent: true, opacity: 0.05, depthWrite: false,
           });
           const line = new THREE.Line(geo, mat);
           this.scene.add(line);
@@ -552,11 +554,15 @@
 
         const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
         d.mat.opacity = opacity;
-        d.mat.color.setRGB(1, 1, 1).lerp(d.bandColor, amp);
+
+        const colR = 1 + (d.bandColor.r - 1) * amp;
+        const colG = 1 + (d.bandColor.g - 1) * amp;
+        const colB = 1 + (d.bandColor.b - 1) * amp;
 
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * 0.8;
         const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * 0.4;
         const yBase = amp * cfg.peakHeight;
+        const colArr = d.geo.getAttribute("color").array;
 
         let cx = startX;
         let cz = startZ;
@@ -570,6 +576,15 @@
           arr[i * 3 + 1] = y;
           arr[i * 3 + 2] = cz;
 
+          const dx = Math.abs(cx) / bound;
+          const dz = Math.abs(cz) / bound;
+          const edge = Math.max(dx, dz);
+          const fade = edge < 0.6 ? 1 : Math.max(0, 1 - (edge - 0.6) / 0.4);
+
+          colArr[i * 3]     = colR * fade;
+          colArr[i * 3 + 1] = colG * fade;
+          colArr[i * 3 + 2] = colB * fade;
+
           cx += Math.cos(angle) * FLOW_STEP_SIZE;
           cz += Math.sin(angle) * FLOW_STEP_SIZE;
 
@@ -578,6 +593,7 @@
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
+        d.geo.getAttribute("color").needsUpdate = true;
       }
     }
 
