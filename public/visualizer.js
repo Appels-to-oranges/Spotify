@@ -166,7 +166,7 @@
         this.analyser.smoothingTimeConstant = cfg.fftSmooth;
         src.connect(this.analyser);
         this.delayNode = this.audioCtx.createDelay(1.0);
-        this.delayNode.delayTime.value = 0.08;
+        this.delayNode.delayTime.value = 0.10;
         this.analyser.connect(this.delayNode);
         this.delayNode.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
