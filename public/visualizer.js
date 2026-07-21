@@ -236,7 +236,7 @@
         const norm = Math.min(1, Math.max(0, (raw - floor) / range));
 
         if (norm > this.bandDisplay[b]) {
-          this.bandDisplay[b] = norm;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.4;
         } else {
           this.bandDisplay[b] *= cfg.decay;
         }
@@ -342,10 +342,14 @@
     _updateRidges() {
       const histW = cfg.histW;
       const raw = new Float32Array(histW);
+      const fadeLen = Math.min(40, Math.floor(histW * 0.08));
 
       for (let b = 0; b < this.activeBands && b < this.ridgeData.length; b++) {
         for (let i = 0; i < histW; i++) {
-          raw[i] = this.history[b][(this.writeCol + i) % histW];
+          let v = this.history[b][(this.writeCol + i) % histW];
+          if (i < fadeLen) v *= i / fadeLen;
+          else if (i > histW - fadeLen) v *= (histW - i) / fadeLen;
+          raw[i] = v;
         }
 
         this._smoothPass(raw, cfg.smoothPasses);
