@@ -46,7 +46,7 @@
             </label>
             <label class="setting-row" title="Vertical height of the camera above the plane">
               <span class="setting-label">Orbit Height</span>
-              <input type="range" class="setting-slider" id="s-orbit-height" min="1" max="30" step="0.5" value="5" />
+              <input type="range" class="setting-slider" id="s-orbit-height" min="1" max="50" step="0.5" value="5" />
               <span class="setting-val" id="sv-orbit-height">5</span>
             </label>
             <label class="setting-row" title="How fast the camera orbits around the visualizer">
@@ -96,14 +96,14 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Dynamics</span>
-            <label class="setting-row" title="How fast peaks fall off after a hit — lower = longer sustain">
+            <label class="setting-row" title="How fast peaks fall off after a hit — higher = longer sustain">
               <span class="setting-label">Decay Rate</span>
               <input type="range" class="setting-slider" id="s-decay" min="0.01" max="0.98" step="0.01" value="0.10" />
               <span class="setting-val" id="sv-decay">0.10</span>
             </label>
             <label class="setting-row" title="How fast the running average adapts to level changes">
               <span class="setting-label">Baseline Rate</span>
-              <input type="range" class="setting-slider" id="s-avg-rate" min="0.0005" max="0.02" step="0.0005" value="0.003" />
+              <input type="range" class="setting-slider" id="s-avg-rate" min="0.0005" max="0.05" step="0.0005" value="0.003" />
               <span class="setting-val" id="sv-avg-rate">0.003</span>
             </label>
             <label class="setting-row" title="How fast the peak ceiling drops — lower = peaks stay large longer">
@@ -111,7 +111,7 @@
               <input type="range" class="setting-slider" id="s-peak-decay" min="0.0005" max="0.02" step="0.0005" value="0.0005" />
               <span class="setting-val" id="sv-peak-decay">0.0005</span>
             </label>
-            <label class="setting-row" title="Portion of the baseline subtracted before normalizing — higher = less noise">
+            <label class="setting-row" title="How much of the baseline is treated as silence — higher = only strong signals show">
               <span class="setting-label">Floor Factor</span>
               <input type="range" class="setting-slider" id="s-floor-factor" min="0.5" max="0.99" step="0.01" value="0.99" />
               <span class="setting-val" id="sv-floor-factor">0.99</span>
@@ -135,9 +135,9 @@
               <input type="range" class="setting-slider" id="s-color-mix" min="0" max="1" step="0.05" value="0" />
               <span class="setting-val" id="sv-color-mix">0</span>
             </label>
-            <label class="setting-row" title="How slowly color fades back to white after a peak — lower = lingers longer">
+            <label class="setting-row" title="How fast color fades back to white after a peak — lower = lingers longer">
               <span class="setting-label">Color Decay</span>
-              <input type="range" class="setting-slider" id="s-color-decay" min="0.005" max="0.2" step="0.005" value="0.03" />
+              <input type="range" class="setting-slider" id="s-color-decay" min="0.005" max="0.5" step="0.005" value="0.03" />
               <span class="setting-val" id="sv-color-decay">0.03</span>
             </label>
           </div>
@@ -161,7 +161,7 @@
             </label>
             <label class="setting-row" title="How fast the noise field evolves over time — lower = calmer drift">
               <span class="setting-label">Noise Speed</span>
-              <input type="range" class="setting-slider" id="s-flow-noise-speed" min="0.005" max="0.1" step="0.005" value="0.025" />
+              <input type="range" class="setting-slider" id="s-flow-noise-speed" min="0.005" max="0.2" step="0.005" value="0.025" />
               <span class="setting-val" id="sv-flow-noise-speed">0.025</span>
             </label>
             <label class="setting-row" title="Layers of noise detail — more = richer turbulence">
@@ -169,7 +169,7 @@
               <input type="range" class="setting-slider" id="s-flow-octaves" min="1" max="5" step="1" value="2" />
               <span class="setting-val" id="sv-flow-octaves">2</span>
             </label>
-            <label class="setting-row" title="Where lines start fading near the edges — lower = wider visible area">
+            <label class="setting-row" title="Where lines start fading near the edges — higher = later fade, more visible">
               <span class="setting-label">Edge Fade Start</span>
               <input type="range" class="setting-slider" id="s-flow-edge-fade" min="0.2" max="0.95" step="0.05" value="0.6" />
               <span class="setting-val" id="sv-flow-edge-fade">0.6</span>

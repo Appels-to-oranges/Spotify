@@ -717,20 +717,11 @@
   window.__vizRebuild = () => viz.rebuildCurrentTheme();
   window.__vizResize = () => viz._resize();
 
-  /* ===== Theme button ===== */
+  /* ===== Theme visibility ===== */
 
   function updateThemeSettings() {
     const isWave = THEMES[currentTheme] === "wavestation";
     document.querySelectorAll(".theme-perlin").forEach(el => el.style.display = isWave ? "none" : "block");
-  }
-
-  const themeBtn = document.getElementById("theme-btn");
-  if (themeBtn) {
-    themeBtn.addEventListener("click", () => {
-      const name = viz.switchTheme();
-      themeBtn.title = name === "wavestation" ? "Theme: WaveStation" : "Theme: PerlinStation";
-      updateThemeSettings();
-    });
   }
 
   updateThemeSettings();
@@ -823,6 +814,62 @@
       }
     });
   });
+
+  /* ===== Theme defaults ===== */
+
+  const themeDefaults = {
+    wavestation: {
+      orbitRadius: 20, orbitHeight: 5, orbitSpeed: 0.15, fov: 50,
+      bands: 24, peakHeight: 2.0, chartSize: 16, histW: 250,
+      smoothPasses: 12, fftSmooth: 0.95,
+      decay: 0.10, avgRate: 0.003, peakDecay: 0.0005, floorFactor: 0.99,
+      lineOpacity: 1.0, fillOpacity: 0.10, colorMix: 0, colorDecay: 0.03,
+      audioDelay: 0.10, minDb: -80, maxDb: 0,
+    },
+    perlinstation: {
+      orbitRadius: 14.5, orbitHeight: 30, orbitSpeed: 0, fov: 50,
+      bands: 48, peakHeight: 4, chartSize: 16, histW: 100,
+      smoothPasses: 20, fftSmooth: 0.59,
+      decay: 0.19, avgRate: 0.02, peakDecay: 0.0005, floorFactor: 0.85,
+      lineOpacity: 0.20, fillOpacity: 0.10, colorMix: 1, colorDecay: 0.20,
+      audioDelay: 0.10, minDb: -80, maxDb: 0,
+      flowPerBand: 50, flowSteps: 30, flowNoiseFreq: 0.03, flowNoiseSpeed: 0.10,
+      flowOctaves: 3, flowEdgeFade: 0.20, flowStartDrift: 0.8,
+      flowStepSizeLo: 0.02, flowStepSizeHi: 0.03, flowStepSizeReact: 0.50,
+      flowStagger: 0.80, flowHistWindow: 0.10, flowHistFade: 0.30, flowHistBlend: 0.10,
+    },
+  };
+
+  function applyThemeDefaults(themeName) {
+    const defs = themeDefaults[themeName];
+    if (!defs) return;
+    Object.assign(cfg, defs);
+
+    Object.entries(sliders).forEach(([id, { key }]) => {
+      const slider = document.getElementById(id);
+      const valEl = document.getElementById("sv-" + id.slice(2));
+      if (!slider || !(key in defs)) return;
+      slider.value = defs[key];
+      if (valEl) {
+        if (key === "audioDelay") valEl.textContent = Math.round(defs[key] * 1000) + "ms";
+        else {
+          const v = defs[key];
+          valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
+        }
+      }
+    });
+  }
+
+  const themeBtn = document.getElementById("theme-btn");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const name = viz.switchTheme();
+      themeBtn.title = name === "wavestation" ? "Theme: WaveStation" : "Theme: PerlinStation";
+      applyThemeDefaults(name);
+      updateThemeSettings();
+      viz.rebuildCurrentTheme();
+    });
+  }
 
   /* ===== Audio hook ===== */
 
