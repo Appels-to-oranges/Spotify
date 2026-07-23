@@ -34,6 +34,7 @@
     colorMix: 0,
     colorDecay: 0.03,
     colorBase: 0,
+    invert: 0,
     bgBrightness: 0,
     envelopeSteep: 1.0,
 
@@ -754,6 +755,8 @@
       const bgV = cfg.bgBrightness;
       this.renderer.setClearColor(new THREE.Color(bgV, bgV, bgV), 1);
 
+      this.canvas.style.filter = cfg.invert > 0.5 ? "invert(1)" : "";
+
       this.renderer.render(this.scene, this.camera);
     }
   }
@@ -921,6 +924,8 @@
 
     const cbEl = document.getElementById("s-color-base");
     if (cbEl && "colorBase" in defs) cbEl.checked = defs.colorBase > 0.5;
+    const invEl = document.getElementById("s-invert");
+    if (invEl && "invert" in defs) invEl.checked = defs.invert > 0.5;
   }
 
   const themeBtn = document.getElementById("theme-btn");
@@ -988,6 +993,8 @@
 
     const colorBaseEl = document.getElementById("s-color-base");
     if (colorBaseEl) colorBaseEl.checked = snap.colorBase > 0.5;
+    const invertEl = document.getElementById("s-invert");
+    if (invertEl) invertEl.checked = (snap.invert || 0) > 0.5;
 
     viz.rebuildCurrentTheme();
   }
@@ -1048,6 +1055,13 @@
     });
   }
 
+  const invertCheck = document.getElementById("s-invert");
+  if (invertCheck) {
+    invertCheck.addEventListener("change", () => {
+      cfg.invert = invertCheck.checked ? 1 : 0;
+    });
+  }
+
   /* ===== Randomize ===== */
 
   const randomizeBtn = document.getElementById("randomize-btn");
@@ -1076,6 +1090,9 @@
 
       cfg.colorBase = Math.random() > 0.5 ? 1 : 0;
       if (colorBaseCheck) colorBaseCheck.checked = cfg.colorBase > 0.5;
+
+      cfg.invert = Math.random() > 0.7 ? 1 : 0;
+      if (invertCheck) invertCheck.checked = cfg.invert > 0.5;
 
       viz.rebuildCurrentTheme();
     });
