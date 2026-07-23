@@ -40,10 +40,23 @@
 
     flowPerBand: 50,
     flowSteps: 80,
-    flowStepSize: 0.25,
-    flowNoiseFreq: 0.06,
-    flowNoiseSpeed: 0.04,
-    flowOctaves: 2,
+
+    flowStepSizeLo: 0.08,
+    flowStepSizeHi: 0.18,
+    flowStepSizeReact: 0.15,
+
+    flowNoiseFreqLo: 0.02,
+    flowNoiseFreqHi: 0.05,
+    flowNoiseFreqReact: 0.04,
+
+    flowNoiseSpeedLo: 0.015,
+    flowNoiseSpeedHi: 0.035,
+    flowNoiseSpeedReact: 0.03,
+
+    flowOctavesLo: 1,
+    flowOctavesHi: 2,
+    flowOctavesReact: 2,
+
     flowEdgeFade: 0.6,
     flowStartDrift: 0.8,
   };
@@ -568,9 +581,6 @@
     _updatePerlin() {
       const half = cfg.chartSize / 2;
       const bound = half * 1.4;
-      const t = this.time * cfg.flowNoiseSpeed;
-      const nf = cfg.flowNoiseFreq;
-      const oct = Math.round(cfg.flowOctaves);
       const steps = cfg.flowSteps;
       const fadeStart = cfg.flowEdgeFade;
       const fadeRange = Math.max(0.01, 1 - fadeStart);
@@ -580,6 +590,20 @@
         const arr = d.geo.getAttribute("position").array;
         const colArr = d.geo.getAttribute("color").array;
         const amp = this.bandDisplay[d.band] || 0;
+        const bt = d.bandT;
+
+        const nf = cfg.flowNoiseFreqLo + (cfg.flowNoiseFreqHi - cfg.flowNoiseFreqLo) * bt
+                 + amp * cfg.flowNoiseFreqReact;
+        const ns = cfg.flowNoiseSpeedLo + (cfg.flowNoiseSpeedHi - cfg.flowNoiseSpeedLo) * bt
+                 + amp * cfg.flowNoiseSpeedReact;
+        const oct = Math.round(
+          cfg.flowOctavesLo + (cfg.flowOctavesHi - cfg.flowOctavesLo) * bt
+          + amp * cfg.flowOctavesReact
+        );
+        const ss = cfg.flowStepSizeLo + (cfg.flowStepSizeHi - cfg.flowStepSizeLo) * bt
+                 + amp * cfg.flowStepSizeReact;
+
+        const t = this.time * ns;
 
         const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
         d.mat.opacity = opacity;
@@ -613,8 +637,8 @@
           colArr[i * 3 + 1] = colG * fade;
           colArr[i * 3 + 2] = colB * fade;
 
-          cx += Math.cos(angle) * cfg.flowStepSize;
-          cz += Math.sin(angle) * cfg.flowStepSize;
+          cx += Math.cos(angle) * ss;
+          cz += Math.sin(angle) * ss;
 
           cx = Math.max(-bound, Math.min(bound, cx));
           cz = Math.max(-bound, Math.min(bound, cz));
@@ -746,12 +770,20 @@
     "s-audio-delay":  { key: "audioDelay" },
     "s-flow-per-band":  { key: "flowPerBand", rebuild: true },
     "s-flow-steps":     { key: "flowSteps", rebuild: true },
-    "s-flow-step-size": { key: "flowStepSize" },
-    "s-flow-noise-freq":{ key: "flowNoiseFreq" },
-    "s-flow-noise-speed":{ key: "flowNoiseSpeed" },
-    "s-flow-octaves":   { key: "flowOctaves" },
     "s-flow-edge-fade": { key: "flowEdgeFade" },
     "s-flow-start-drift":{ key: "flowStartDrift" },
+    "s-flow-step-size-lo":    { key: "flowStepSizeLo" },
+    "s-flow-step-size-hi":    { key: "flowStepSizeHi" },
+    "s-flow-step-size-react": { key: "flowStepSizeReact" },
+    "s-flow-noise-freq-lo":   { key: "flowNoiseFreqLo" },
+    "s-flow-noise-freq-hi":   { key: "flowNoiseFreqHi" },
+    "s-flow-noise-freq-react":{ key: "flowNoiseFreqReact" },
+    "s-flow-noise-speed-lo":  { key: "flowNoiseSpeedLo" },
+    "s-flow-noise-speed-hi":  { key: "flowNoiseSpeedHi" },
+    "s-flow-noise-speed-react":{ key: "flowNoiseSpeedReact" },
+    "s-flow-octaves-lo":      { key: "flowOctavesLo" },
+    "s-flow-octaves-hi":      { key: "flowOctavesHi" },
+    "s-flow-octaves-react":   { key: "flowOctavesReact" },
   };
 
   let rebuildTimer = null;
