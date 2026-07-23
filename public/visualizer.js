@@ -634,6 +634,7 @@
         let cz = startZ;
 
         for (let i = 0; i < steps; i++) {
+          const envelope = Math.sin((i / (steps - 1)) * Math.PI);
           const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
 
           const yNoise = (fbm3(cx * nf + 200, cz * nf + 200, t, 2) + 1) * 0.5;
@@ -643,7 +644,7 @@
           const hVal = histIdx >= 0 ? Math.max(0, smooth[histIdx]) : 0;
           const histY = hVal * cfg.peakHeight;
 
-          const y = noiseY * (1 - hBlend) + histY * hBlend;
+          const y = (noiseY * (1 - hBlend) + histY * hBlend) * envelope;
 
           arr[i * 3]     = cx;
           arr[i * 3 + 1] = y;
