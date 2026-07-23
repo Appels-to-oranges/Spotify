@@ -55,6 +55,7 @@
     flowStagger: 0.4,
     flowHistWindow: 1.0,
     flowHistFade: 0.08,
+    flowHistBlend: 0.2,
   };
 
   const THEMES = ["wavestation", "perlinstation"];
@@ -588,6 +589,7 @@
       const perBand = cfg.flowPerBand;
       const maxStagger = Math.floor(histW * cfg.flowStagger);
       const histSpan = Math.max(1, Math.floor(histW * cfg.flowHistWindow));
+      const hBlend = cfg.flowHistBlend;
 
       const smoothCache = this._perlinSmoothCache || [];
       const raw = new Float32Array(histW);
@@ -632,11 +634,16 @@
         let cz = startZ;
 
         for (let i = 0; i < steps; i++) {
+          const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
+
+          const yNoise = (fbm3(cx * nf + 200, cz * nf + 200, t, 2) + 1) * 0.5;
+          const noiseY = amp * yNoise * cfg.peakHeight;
+
           const histIdx = Math.min(histW - 1, histW - 1 - stagger + Math.floor(i * histSpan / steps));
           const hVal = histIdx >= 0 ? Math.max(0, smooth[histIdx]) : 0;
+          const histY = hVal * cfg.peakHeight;
 
-          const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
-          const y = hVal * cfg.peakHeight;
+          const y = noiseY * (1 - hBlend) + histY * hBlend;
 
           arr[i * 3]     = cx;
           arr[i * 3 + 1] = y;
@@ -792,6 +799,7 @@
     "s-flow-stagger":         { key: "flowStagger" },
     "s-flow-hist-window":     { key: "flowHistWindow" },
     "s-flow-hist-fade":       { key: "flowHistFade" },
+    "s-flow-hist-blend":      { key: "flowHistBlend" },
   };
 
   let rebuildTimer = null;
