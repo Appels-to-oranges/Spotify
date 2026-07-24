@@ -791,7 +791,9 @@
       const bgV = cfg.bgBrightness;
       this.renderer.setClearColor(new THREE.Color(bgV, bgV, bgV), 1);
 
-      this.canvas.style.filter = cfg.invert > 0.5 ? "invert(1)" : "";
+      const inverted = cfg.invert > 0.5;
+      this.canvas.style.filter = inverted ? "invert(1)" : "";
+      this.canvas.parentElement.classList.toggle("inverted", inverted);
 
       this.renderer.render(this.scene, this.camera);
     }

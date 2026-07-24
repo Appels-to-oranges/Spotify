@@ -291,6 +291,56 @@ body {
   color: rgba(255,255,255,0.85);
 }
 
+/* ===== Inverted (Negative) overrides ===== */
+.inverted .viz-brand .brand-name { color: rgba(0,0,0,0.6); }
+.inverted .viz-brand .brand-sep  { color: rgba(0,0,0,0.2); }
+.inverted .viz-brand .brand-tagline { color: rgba(0,0,0,0.3); }
+.inverted .viz-ctrl-btn {
+  background: rgba(0,0,0,0.08);
+  border-color: rgba(0,0,0,0.15);
+  color: rgba(0,0,0,0.5);
+}
+.inverted .viz-ctrl-btn:hover {
+  background: rgba(0,0,0,0.15);
+  color: rgba(0,0,0,0.8);
+}
+.inverted .viz-settings {
+  background: rgba(245,245,245,0.94);
+  border-left-color: rgba(0,0,0,0.1);
+}
+.inverted .settings-title { color: rgba(0,0,0,0.55); }
+.inverted .settings-close { color: rgba(0,0,0,0.4); }
+.inverted .settings-close:hover { color: rgba(0,0,0,0.8); }
+.inverted .settings-group-label { color: rgba(0,0,0,0.4); }
+.inverted .setting-label { color: rgba(0,0,0,0.55); }
+.inverted .setting-val { color: rgba(0,0,0,0.4); }
+.inverted .setting-slider { accent-color: #999; }
+.inverted .setting-row-check input[type="checkbox"] { accent-color: #999; }
+.inverted .preset-input {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.12);
+  color: #222;
+}
+.inverted .preset-input::placeholder { color: rgba(0,0,0,0.3); }
+.inverted .preset-save-btn {
+  background: rgba(0,0,0,0.08);
+  border-color: rgba(0,0,0,0.15);
+  color: #222;
+}
+.inverted .preset-save-btn:hover { background: rgba(0,0,0,0.15); }
+.inverted .preset-name { color: rgba(0,0,0,0.65); }
+.inverted .preset-row:hover { background: rgba(0,0,0,0.06); }
+.inverted .preset-del { color: rgba(0,0,0,0.3); }
+.inverted .randomize-btn {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.12);
+  color: rgba(0,0,0,0.55);
+}
+.inverted .randomize-btn:hover {
+  background: rgba(0,0,0,0.12);
+  color: rgba(0,0,0,0.8);
+}
+
 /* ===== Now Playing Bar ===== */
 .now-playing-bar {
   position: sticky;
