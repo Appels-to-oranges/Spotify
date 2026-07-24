@@ -314,6 +314,48 @@
         this.audioCtx.resume();
     }
 
+    connectStream(stream) {
+      try {
+        if (!this.audioCtx)
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this._buildBandMap(this.audioCtx.sampleRate);
+
+        if (!this.analyser) {
+          this.analyser = this.audioCtx.createAnalyser();
+          this.analyser.fftSize = cfg.fftSize;
+          this.analyser.minDecibels = cfg.minDb;
+          this.analyser.maxDecibels = cfg.maxDb;
+          this.analyser.smoothingTimeConstant = cfg.fftSmooth;
+          this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
+        }
+
+        this._streamSource = this.audioCtx.createMediaStreamSource(stream);
+        this._streamSource.connect(this.analyser);
+        this._captureStream = stream;
+        this.connected = true;
+        this.isPlaying = true;
+        this.resumeCtx();
+
+        stream.getAudioTracks().forEach(t => {
+          t.addEventListener("ended", () => this.disconnectStream());
+        });
+      } catch (e) {
+        console.warn("Visualizer: stream connect failed", e);
+      }
+    }
+
+    disconnectStream() {
+      if (this._streamSource) {
+        try { this._streamSource.disconnect(); } catch {}
+        this._streamSource = null;
+      }
+      if (this._captureStream) {
+        this._captureStream.getTracks().forEach(t => t.stop());
+        this._captureStream = null;
+      }
+      this.isPlaying = false;
+    }
+
     /* ---- frequency ---- */
 
     _freq() {
@@ -927,6 +969,54 @@
         resetFsIdle();
       }
       setTimeout(() => viz._resize(), 100);
+    });
+  }
+
+  /* ===== System audio capture ===== */
+
+  const captureBtn = document.getElementById("capture-btn");
+  let capturing = false;
+
+  if (captureBtn) {
+    captureBtn.addEventListener("click", async () => {
+      if (capturing) {
+        viz.disconnectStream();
+        capturing = false;
+        captureBtn.classList.remove("capturing");
+        captureBtn.title = "Capture System Audio";
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: true,
+          video: true,
+        });
+
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        const audioTracks = stream.getAudioTracks();
+        if (!audioTracks.length) {
+          stream.getTracks().forEach(t => t.stop());
+          console.warn("No audio track — did you check 'Share audio'?");
+          return;
+        }
+
+        viz.connectStream(stream);
+        capturing = true;
+        captureBtn.classList.add("capturing");
+        captureBtn.title = "Stop Capture";
+
+        audioTracks.forEach(t => {
+          t.addEventListener("ended", () => {
+            capturing = false;
+            captureBtn.classList.remove("capturing");
+            captureBtn.title = "Capture System Audio";
+          });
+        });
+      } catch (e) {
+        if (e.name !== "NotAllowedError") console.warn("Capture failed:", e);
+      }
     });
   }
 
