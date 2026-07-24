@@ -39,22 +39,22 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Camera</span>
-            <label class="setting-row" title="Distance of the camera from center">
+            <label class="setting-row" title="Distance of the camera from center (world units)">
               <span class="setting-label">Orbit Radius</span>
               <input type="range" class="setting-slider" id="s-orbit-radius" min="3" max="25" step="0.5" value="20" />
               <span class="setting-val" id="sv-orbit-radius">20</span>
             </label>
-            <label class="setting-row" title="Vertical height of the camera above the plane">
+            <label class="setting-row" title="Vertical height of the camera above the plane (world units)">
               <span class="setting-label">Orbit Height</span>
               <input type="range" class="setting-slider" id="s-orbit-height" min="1" max="50" step="0.5" value="5" />
               <span class="setting-val" id="sv-orbit-height">5</span>
             </label>
-            <label class="setting-row" title="How fast the camera orbits around the visualizer">
+            <label class="setting-row" title="How fast the camera orbits (radians/sec)">
               <span class="setting-label">Orbit Speed</span>
               <input type="range" class="setting-slider" id="s-orbit-speed" min="0" max="0.5" step="0.005" value="0.15" />
               <span class="setting-val" id="sv-orbit-speed">0.15</span>
             </label>
-            <label class="setting-row" title="Field of view — lower is more telephoto, higher is wider">
+            <label class="setting-row" title="Field of view in degrees — lower = telephoto, higher = wide angle">
               <span class="setting-label">FOV</span>
               <input type="range" class="setting-slider" id="s-fov" min="15" max="90" step="1" value="50" />
               <span class="setting-val" id="sv-fov">50</span>
@@ -69,7 +69,7 @@
                 <input type="range" class="setting-slider" id="s-camera-hold-time" min="5" max="60" step="1" value="15" />
                 <span class="setting-val" id="sv-camera-hold-time">15</span>
               </label>
-              <label class="setting-row" title="How fast camera transitions happen — lower = slower, more cinematic">
+              <label class="setting-row" title="Blend rate per frame — lower = slower, more cinematic transitions">
                 <span class="setting-label">Lerp Rate</span>
                 <input type="range" class="setting-slider" id="s-camera-lerp-rate" min="0.002" max="0.03" step="0.001" value="0.008" />
                 <span class="setting-val" id="sv-camera-lerp-rate">0.008</span>
@@ -95,12 +95,12 @@
               <input type="range" class="setting-slider" id="s-bands" min="4" max="48" step="1" value="24" />
               <span class="setting-val" id="sv-bands">24</span>
             </label>
-            <label class="setting-row" title="Maximum height of peaks when audio is at full amplitude">
+            <label class="setting-row" title="Maximum height of peaks at full amplitude (world units)">
               <span class="setting-label">Peak Height</span>
               <input type="range" class="setting-slider" id="s-peak-height" min="0.5" max="10" step="0.25" value="2" />
               <span class="setting-val" id="sv-peak-height">2</span>
             </label>
-            <label class="setting-row" title="Width and depth of the visualizer plane">
+            <label class="setting-row" title="Width of the visualizer plane (world units)">
               <span class="setting-label">Chart Size</span>
               <input type="range" class="setting-slider" id="s-chart-size" min="2" max="20" step="0.5" value="16" />
               <span class="setting-val" id="sv-chart-size">16</span>
@@ -114,7 +114,7 @@
               <input type="range" class="setting-slider" id="s-smooth-passes" min="0" max="20" step="1" value="12" />
               <span class="setting-val" id="sv-smooth-passes">12</span>
             </label>
-            <label class="setting-row" title="FFT temporal smoothing — higher = slower response, less jitter">
+            <label class="setting-row" title="FFT temporal smoothing (0–1) — higher = slower response, less jitter">
               <span class="setting-label">FFT Smoothing</span>
               <input type="range" class="setting-slider" id="s-fft-smooth" min="0" max="0.99" step="0.01" value="0.95" />
               <span class="setting-val" id="sv-fft-smooth">0.95</span>
@@ -123,22 +123,22 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Dynamics</span>
-            <label class="setting-row" title="How fast peaks fall off after a hit — higher = longer sustain">
+            <label class="setting-row" title="Decay multiplier per frame (0–1) — higher = peaks sustain longer">
               <span class="setting-label">Decay Rate</span>
               <input type="range" class="setting-slider" id="s-decay" min="0.01" max="0.98" step="0.01" value="0.10" />
               <span class="setting-val" id="sv-decay">0.10</span>
             </label>
-            <label class="setting-row" title="How fast the running average adapts to level changes">
+            <label class="setting-row" title="Baseline tracking rate per frame — higher = adapts faster to volume changes">
               <span class="setting-label">Baseline Rate</span>
               <input type="range" class="setting-slider" id="s-avg-rate" min="0.0005" max="0.05" step="0.0005" value="0.003" />
               <span class="setting-val" id="sv-avg-rate">0.003</span>
             </label>
-            <label class="setting-row" title="How fast the peak ceiling drops — lower = peaks stay large longer">
+            <label class="setting-row" title="Peak ceiling decay rate per frame — lower = peaks stay large longer">
               <span class="setting-label">Ceiling Decay</span>
               <input type="range" class="setting-slider" id="s-peak-decay" min="0.0005" max="0.02" step="0.0005" value="0.0005" />
               <span class="setting-val" id="sv-peak-decay">0.0005</span>
             </label>
-            <label class="setting-row" title="How much of the baseline is treated as silence — higher = only strong signals show">
+            <label class="setting-row" title="Floor as fraction of baseline (0–1) — higher = more of the average is subtracted as silence">
               <span class="setting-label">Floor Factor</span>
               <input type="range" class="setting-slider" id="s-floor-factor" min="0.5" max="0.99" step="0.01" value="0.99" />
               <span class="setting-val" id="sv-floor-factor">0.99</span>
@@ -147,17 +147,17 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Appearance</span>
-            <label class="setting-row" title="Spacing between frequency bands on the Z axis — lower = tighter, higher = more spread">
+            <label class="setting-row" title="Multiplier on Z spacing between bands — 0.5 = half spacing, 2 = double">
               <span class="setting-label">Line Spacing</span>
               <input type="range" class="setting-slider" id="s-line-spacing" min="0.2" max="3" step="0.05" value="1" />
               <span class="setting-val" id="sv-line-spacing">1</span>
             </label>
-            <label class="setting-row" title="Opacity of the ridge/flow lines">
+            <label class="setting-row" title="Line opacity (0–1)">
               <span class="setting-label">Line Opacity</span>
               <input type="range" class="setting-slider" id="s-line-opacity" min="0" max="1" step="0.05" value="1" />
               <span class="setting-val" id="sv-line-opacity">1</span>
             </label>
-            <label class="setting-row" title="Opacity of the filled area beneath lines">
+            <label class="setting-row" title="Fill area opacity (0–1)">
               <span class="setting-label">Fill Opacity</span>
               <input type="range" class="setting-slider" id="s-fill-opacity" min="0" max="1" step="0.01" value="0.10" />
               <span class="setting-val" id="sv-fill-opacity">0.10</span>
@@ -172,7 +172,7 @@
               <input type="range" class="setting-slider" id="s-color-mix" min="0" max="1" step="0.05" value="0" />
               <span class="setting-val" id="sv-color-mix">0</span>
             </label>
-            <label class="setting-row" title="How fast color fades back to base after a peak — lower = lingers longer">
+            <label class="setting-row" title="Color decay rate per frame — lower = color lingers longer after peaks">
               <span class="setting-label">Color Decay</span>
               <input type="range" class="setting-slider" id="s-color-decay" min="0.005" max="0.5" step="0.005" value="0.03" />
               <span class="setting-val" id="sv-color-decay">0.03</span>
@@ -189,7 +189,7 @@
 
           <div class="settings-group theme-wave" style="display:none">
             <span class="settings-group-label">Ridge Flow</span>
-            <label class="setting-row" title="How much noise displaces the ridge lines — 0 = perfectly straight, higher = more organic">
+            <label class="setting-row" title="Flow displacement strength (world units) — 0 = straight lines">
               <span class="setting-label">Strength</span>
               <input type="range" class="setting-slider" id="s-wave-flow-strength" min="0" max="3" step="0.05" value="0" />
               <span class="setting-val" id="sv-wave-flow-strength">0</span>
@@ -199,7 +199,7 @@
               <input type="range" class="setting-slider" id="s-wave-flow-freq" min="0.02" max="0.5" step="0.01" value="0.15" />
               <span class="setting-val" id="sv-wave-flow-freq">0.15</span>
             </label>
-            <label class="setting-row" title="How fast the flow field evolves over time">
+            <label class="setting-row" title="Flow noise evolution speed — how fast the displacement pattern drifts">
               <span class="setting-label">Speed</span>
               <input type="range" class="setting-slider" id="s-wave-flow-speed" min="0" max="0.5" step="0.01" value="0.1" />
               <span class="setting-val" id="sv-wave-flow-speed">0.1</span>
@@ -208,7 +208,7 @@
 
           <div class="settings-group theme-perlin" style="display:none">
             <span class="settings-group-label">Envelope</span>
-            <label class="setting-row" title="Controls the mound shape — 1 = smooth sine, higher = sharper peak, lower = flatter plateau">
+            <label class="setting-row" title="Envelope power exponent — 1.0 = smooth sine, >1 = sharper peaks, <1 = flatter plateau">
               <span class="setting-label">Steepness</span>
               <input type="range" class="setting-slider" id="s-envelope-steep" min="0.2" max="3" step="0.1" value="1" />
               <span class="setting-val" id="sv-envelope-steep">1</span>
@@ -242,12 +242,12 @@
               <input type="range" class="setting-slider" id="s-flow-octaves" min="1" max="5" step="1" value="2" />
               <span class="setting-val" id="sv-flow-octaves">2</span>
             </label>
-            <label class="setting-row" title="Where lines start fading near the edges — higher = later fade, more visible">
+            <label class="setting-row" title="Edge fade start as fraction of chart radius (0–1) — higher = fade begins later, more visible edge">
               <span class="setting-label">Edge Fade Start</span>
               <input type="range" class="setting-slider" id="s-flow-edge-fade" min="0.2" max="0.95" step="0.05" value="0.6" />
               <span class="setting-val" id="sv-flow-edge-fade">0.6</span>
             </label>
-            <label class="setting-row" title="How much streamline start positions wander over time">
+            <label class="setting-row" title="Start position drift range (world units) — how far streamline origins wander">
               <span class="setting-label">Start Drift</span>
               <input type="range" class="setting-slider" id="s-flow-start-drift" min="0" max="3" step="0.1" value="0.8" />
               <span class="setting-val" id="sv-flow-start-drift">0.8</span>
@@ -266,17 +266,17 @@
 
           <div class="settings-group theme-perlin" style="display:none">
             <span class="settings-group-label">Step Size <small>(bass → treble)</small></span>
-            <label class="setting-row" title="Step size for the lowest frequency bands at rest">
+            <label class="setting-row" title="Step size for bass bands at rest (world units per vertex)">
               <span class="setting-label">Lo (Bass)</span>
               <input type="range" class="setting-slider" id="s-flow-step-size-lo" min="0.02" max="0.5" step="0.01" value="0.12" />
               <span class="setting-val" id="sv-flow-step-size-lo">0.12</span>
             </label>
-            <label class="setting-row" title="Step size for the highest frequency bands at rest">
+            <label class="setting-row" title="Step size for treble bands at rest (world units per vertex)">
               <span class="setting-label">Hi (Treble)</span>
               <input type="range" class="setting-slider" id="s-flow-step-size-hi" min="0.02" max="0.5" step="0.01" value="0.20" />
               <span class="setting-val" id="sv-flow-step-size-hi">0.20</span>
             </label>
-            <label class="setting-row" title="How much amplitude increases step size — lines stretch further on loud hits">
+            <label class="setting-row" title="Extra step size per unit amplitude (world units) — lines stretch on loud hits">
               <span class="setting-label">Audio React</span>
               <input type="range" class="setting-slider" id="s-flow-step-size-react" min="0" max="0.5" step="0.01" value="0.12" />
               <span class="setting-val" id="sv-flow-step-size-react">0.12</span>
@@ -285,7 +285,7 @@
 
           <div class="settings-group">
             <span class="settings-group-label">History</span>
-            <label class="setting-row" title="Number of amplitude samples stored — longer = more visible song history">
+            <label class="setting-row" title="Number of amplitude samples stored — more = longer visible song history">
               <span class="setting-label">History Length</span>
               <input type="range" class="setting-slider" id="s-hist-w" min="100" max="800" step="10" value="250" />
               <span class="setting-val" id="sv-hist-w">250</span>
@@ -304,7 +304,7 @@
               <input type="range" class="setting-slider" id="s-flow-hist-window" min="0.1" max="1" step="0.05" value="1" />
               <span class="setting-val" id="sv-flow-hist-window">1</span>
             </label>
-            <label class="setting-row" title="Fade length at the edges of the history buffer — higher = softer entry/exit">
+            <label class="setting-row" title="History edge fade as fraction of buffer length (0–1) — higher = softer entry/exit">
               <span class="setting-label">History Fade</span>
               <input type="range" class="setting-slider" id="s-flow-hist-fade" min="0.02" max="0.3" step="0.01" value="0.08" />
               <span class="setting-val" id="sv-flow-hist-fade">0.08</span>
@@ -318,7 +318,7 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Sync</span>
-            <label class="setting-row" title="Delays audio output to sync with visualizer latency">
+            <label class="setting-row" title="Audio output delay in seconds — sync audio with visualizer response time">
               <span class="setting-label">Audio Delay</span>
               <input type="range" class="setting-slider" id="s-audio-delay" min="0" max="0.3" step="0.005" value="0.10" />
               <span class="setting-val" id="sv-audio-delay">100ms</span>
@@ -327,12 +327,12 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Audio Range</span>
-            <label class="setting-row" title="Minimum decibel threshold — signals below this are treated as silence">
+            <label class="setting-row" title="Minimum decibel threshold (dBFS) — signals below this are treated as silence">
               <span class="setting-label">Min dB</span>
               <input type="range" class="setting-slider" id="s-min-db" min="-100" max="-30" step="1" value="-80" />
               <span class="setting-val" id="sv-min-db">-80</span>
             </label>
-            <label class="setting-row" title="Maximum decibel threshold — signals above this are clipped to full">
+            <label class="setting-row" title="Maximum decibel threshold (dBFS) — signals above this are clipped to full">
               <span class="setting-label">Max dB</span>
               <input type="range" class="setting-slider" id="s-max-db" min="-30" max="0" step="1" value="0" />
               <span class="setting-val" id="sv-max-db">0</span>

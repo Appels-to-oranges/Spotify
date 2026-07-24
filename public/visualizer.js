@@ -245,10 +245,11 @@
         height: cfg.orbitHeight,
         fov: cfg.fov,
         radius: cfg.orbitRadius,
-        speedMult: 1.0,
+        speed: cfg.orbitSpeed,
       };
       this.camTarget = { ...this.camCurrent };
       this.camHoldTimer = cfg.cameraHoldTime;
+      this.camAngle = 0;
 
       this.ridgeData = [];
       this.perlinData = [];
@@ -772,10 +773,10 @@
     _pickCamTarget() {
       const rr = (lo, hi) => lo + Math.random() * (hi - lo);
       this.camTarget = {
-        height: rr(cfg.orbitHeight * 0.5, cfg.orbitHeight * 2.0),
-        fov:    rr(cfg.fov * 0.85, cfg.fov * 1.3),
-        radius: rr(cfg.orbitRadius * 0.85, cfg.orbitRadius * 1.15),
-        speedMult: rr(0.6, 1.4),
+        height: rr(cfg.orbitHeight * 0.4, cfg.orbitHeight * 2.5),
+        fov:    rr(cfg.fov * 0.75, cfg.fov * 1.4),
+        radius: rr(cfg.orbitRadius * 0.7, cfg.orbitRadius * 1.3),
+        speed:  rr(cfg.orbitSpeed * 0.5, cfg.orbitSpeed * 1.5),
       };
     }
 
@@ -798,14 +799,16 @@
         this.camCurrent.height += (this.camTarget.height - this.camCurrent.height) * lr;
         this.camCurrent.fov += (this.camTarget.fov - this.camCurrent.fov) * lr;
         this.camCurrent.radius += (this.camTarget.radius - this.camCurrent.radius) * lr;
-        this.camCurrent.speedMult += (this.camTarget.speedMult - this.camCurrent.speedMult) * lr;
+        this.camCurrent.speed += (this.camTarget.speed - this.camCurrent.speed) * lr;
 
-        angle = this.time * cfg.orbitSpeed * this.camCurrent.speedMult;
+        this.camAngle += this.camCurrent.speed * dt;
+        angle = this.camAngle;
         height = this.camCurrent.height;
         radius = this.camCurrent.radius;
         fov = this.camCurrent.fov;
       } else {
-        angle = this.time * cfg.orbitSpeed;
+        this.camAngle = this.time * cfg.orbitSpeed;
+        angle = this.camAngle;
         height = cfg.orbitHeight;
         radius = cfg.orbitRadius;
         fov = cfg.fov;
@@ -813,7 +816,7 @@
         this.camCurrent.height = height;
         this.camCurrent.fov = fov;
         this.camCurrent.radius = radius;
-        this.camCurrent.speedMult = 1.0;
+        this.camCurrent.speed = cfg.orbitSpeed;
       }
 
       this.camera.position.set(
