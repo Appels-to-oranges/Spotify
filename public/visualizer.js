@@ -30,7 +30,7 @@
     lineOpacity: 1.0,
     fillOpacity: 0.10,
 
-    lineWidth: 1,
+    lineSpacing: 1.0,
     colorMix: 0,
     colorDecay: 0.03,
     colorBase: 0,
@@ -440,7 +440,8 @@
         const hz = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
         const bandColor = new THREE.Color(cr, cg, cb);
-        const z = -cfg.chartSize / 2 + bandT * cfg.chartSize;
+        const zSpan = cfg.chartSize * cfg.lineSpacing;
+        const z = -zSpan / 2 + bandT * zSpan;
 
         const linePos = new Float32Array(histW * 3);
         for (let i = 0; i < histW; i++) {
@@ -450,7 +451,7 @@
         }
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: cfg.lineOpacity, linewidth: cfg.lineWidth });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: cfg.lineOpacity });
         const line = new THREE.Line(lineGeo, lineMat);
         this.scene.add(line);
 
@@ -504,7 +505,6 @@
         const z = d.z;
         d.lineMat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
-        d.lineMat.linewidth = cfg.lineWidth;
 
         const baseColor = cfg.colorBase > 0.5 ? _black : _white;
         const cBlend = 1 - (1 - (this.bandColorAmp[b] || 0)) * cfg.colorMix;
@@ -580,7 +580,7 @@
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
           geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
           const mat = new THREE.LineBasicMaterial({
-            vertexColors: true, transparent: true, opacity: 0.05, depthWrite: false, linewidth: cfg.lineWidth,
+            vertexColors: true, transparent: true, opacity: 0.05, depthWrite: false,
           });
           const line = new THREE.Line(geo, mat);
           this.scene.add(line);
@@ -605,10 +605,11 @@
 
           const seed = b * 31.7 + l * 3.1;
           const sx = simplex3(seed, 0, 0) * half * 1.4;
-          const orderedZ = -half + bandT * cfg.chartSize;
-          const spreadOffset = simplex3(b * 7.3, 0.5, 0) * half * 1.8 * cfg.flowBandSpread;
-          const baseZ = orderedZ * (1 - cfg.flowBandSpread) + (-half + (simplex3(b * 7.3, 0.5, 0) + 1) * 0.5 * cfg.chartSize) * cfg.flowBandSpread;
-          const sz = baseZ + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
+          const zSpan = cfg.chartSize * cfg.lineSpacing;
+          const zHalf = zSpan / 2;
+          const orderedZ = -zHalf + bandT * zSpan;
+          const baseZ = orderedZ * (1 - cfg.flowBandSpread) + (-zHalf + (simplex3(b * 7.3, 0.5, 0) + 1) * 0.5 * zSpan) * cfg.flowBandSpread;
+          const sz = baseZ + simplex3(0, seed, 0) * (zSpan / bands) * 0.6;
 
           this.perlinData.push({ line, geo, mat, fillMesh, fillGeo, fillMat, band: b, bandT, bandColor, sx, sz, seed, lineIdx: l });
         }
@@ -663,7 +664,6 @@
 
         d.mat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
-        d.mat.linewidth = cfg.lineWidth;
 
         const baseR = cfg.colorBase > 0.5 ? 0 : 1;
         const baseG = baseR;
@@ -865,7 +865,7 @@
     "s-floor-factor": { key: "floorFactor" },
     "s-line-opacity": { key: "lineOpacity" },
     "s-fill-opacity": { key: "fillOpacity" },
-    "s-line-width":   { key: "lineWidth" },
+    "s-line-spacing": { key: "lineSpacing", rebuild: true },
     "s-color-mix":    { key: "colorMix" },
     "s-color-decay":  { key: "colorDecay" },
     "s-color-base":   { key: "colorBase" },
@@ -925,7 +925,7 @@
       bands: 24, peakHeight: 2.0, chartSize: 16, histW: 250,
       smoothPasses: 12, fftSmooth: 0.95,
       decay: 0.10, avgRate: 0.003, peakDecay: 0.0005, floorFactor: 0.99,
-      lineWidth: 1, lineOpacity: 1.0, fillOpacity: 0.10,
+      lineSpacing: 1.0, lineOpacity: 1.0, fillOpacity: 0.10,
       colorMix: 0, colorDecay: 0.03, colorBase: 0,
       bgBrightness: 0,
       waveFlowStrength: 0, waveFlowFreq: 0.15, waveFlowSpeed: 0.1,
@@ -936,7 +936,7 @@
       bands: 48, peakHeight: 3, chartSize: 16, histW: 200,
       smoothPasses: 20, fftSmooth: 0.75,
       decay: 0.60, avgRate: 0.05, peakDecay: 0.0005, floorFactor: 0.90,
-      lineWidth: 1, lineOpacity: 0.20, fillOpacity: 0.15,
+      lineSpacing: 1.0, lineOpacity: 0.20, fillOpacity: 0.15,
       colorMix: 0.70, colorDecay: 0.20, colorBase: 0,
       bgBrightness: 0, envelopeSteep: 1.0,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
