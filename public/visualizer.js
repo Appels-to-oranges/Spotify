@@ -320,20 +320,31 @@
           this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         this._buildBandMap(this.audioCtx.sampleRate);
 
-        if (!this.analyser) {
-          this.analyser = this.audioCtx.createAnalyser();
-          this.analyser.fftSize = cfg.fftSize;
-          this.analyser.minDecibels = cfg.minDb;
-          this.analyser.maxDecibels = cfg.maxDb;
-          this.analyser.smoothingTimeConstant = cfg.fftSmooth;
-          this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
+        if (this.analyser && this.delayNode) {
+          try { this.analyser.disconnect(this.delayNode); } catch {}
         }
 
+        this._captureAnalyser = this.audioCtx.createAnalyser();
+        this._captureAnalyser.fftSize = cfg.fftSize;
+        this._captureAnalyser.minDecibels = Math.min(cfg.minDb, -90);
+        this._captureAnalyser.maxDecibels = cfg.maxDb;
+        this._captureAnalyser.smoothingTimeConstant = cfg.fftSmooth;
+
+        const gain = this.audioCtx.createGain();
+        gain.gain.value = 2.0;
+
         this._streamSource = this.audioCtx.createMediaStreamSource(stream);
-        this._streamSource.connect(this.analyser);
+        this._streamSource.connect(gain);
+        gain.connect(this._captureAnalyser);
+        this._captureGain = gain;
+
+        this._prevAnalyser = this.analyser;
+        this.analyser = this._captureAnalyser;
+        this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
         this._captureStream = stream;
         this.connected = true;
         this.isPlaying = true;
+        this._isCapture = true;
         this.resumeCtx();
 
         stream.getAudioTracks().forEach(t => {
@@ -349,10 +360,28 @@
         try { this._streamSource.disconnect(); } catch {}
         this._streamSource = null;
       }
+      if (this._captureGain) {
+        try { this._captureGain.disconnect(); } catch {}
+        this._captureGain = null;
+      }
+      if (this._captureAnalyser) {
+        this._captureAnalyser = null;
+      }
       if (this._captureStream) {
         this._captureStream.getTracks().forEach(t => t.stop());
         this._captureStream = null;
       }
+
+      if (this._prevAnalyser) {
+        this.analyser = this._prevAnalyser;
+        this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
+        this._prevAnalyser = null;
+        if (this.delayNode) {
+          try { this.analyser.connect(this.delayNode); } catch {}
+        }
+      }
+
+      this._isCapture = false;
       this.isPlaying = false;
     }
 
@@ -362,12 +391,14 @@
       if (this.connected && this.analyser && this.isPlaying) {
         if (this.analyser.smoothingTimeConstant !== cfg.fftSmooth)
           this.analyser.smoothingTimeConstant = cfg.fftSmooth;
-        if (this.analyser.minDecibels !== cfg.minDb)
-          this.analyser.minDecibels = cfg.minDb;
-        if (this.analyser.maxDecibels !== cfg.maxDb)
-          this.analyser.maxDecibels = cfg.maxDb;
-        if (this.delayNode && this.delayNode.delayTime.value !== cfg.audioDelay)
-          this.delayNode.delayTime.value = cfg.audioDelay;
+        if (!this._isCapture) {
+          if (this.analyser.minDecibels !== cfg.minDb)
+            this.analyser.minDecibels = cfg.minDb;
+          if (this.analyser.maxDecibels !== cfg.maxDb)
+            this.analyser.maxDecibels = cfg.maxDb;
+          if (this.delayNode && this.delayNode.delayTime.value !== cfg.audioDelay)
+            this.delayNode.delayTime.value = cfg.audioDelay;
+        }
 
         this.analyser.getByteFrequencyData(this.rawData);
         for (let i = 0; i < this.binCount; i++) {
